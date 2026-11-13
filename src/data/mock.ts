@@ -1,362 +1,329 @@
-// All mock data lives here. The UI never imports this file directly: it goes through src/data/api.ts,
-// so swapping in a real database means rewriting api.ts only. Rename the brand, outlets and categories freely.
-import type { Activity, Ad, AdSet, Brand, Campaign, Category, FestiveDate, Insight, Intent, Lead, LeadStatus, Sale, Settings, Share, Task, Template, User } from './types'
-import { LOST_REASONS } from './types'
+import type { AdSet, Campaign, Lead, Stage, Task } from './types'
 
-// Seeded RNG so data is stable between reloads.
-let seed = 20261106
-const rand = () => {
-  seed |= 0
-  seed = (seed + 0x6d2b79f5) | 0
-  let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
-  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-}
-const between = (a: number, b: number) => a + rand() * (b - a)
-const pick = <T,>(arr: readonly T[]): T => arr[Math.floor(rand() * arr.length)]
-const weighted = <T,>(items: readonly T[], weights: readonly number[]): T => {
-  let x = rand() * weights.reduce((a, b) => a + b, 0)
-  for (let i = 0; i < items.length; i++) if ((x -= weights[i]) <= 0) return items[i]
-  return items[items.length - 1]
-}
-const round2 = (n: number) => Math.round(n * 100) / 100
+export const TODAY = 'Friday, 13 November 2026'
 
-export const DAYS = 60
-const HOUR = 3600_000
-const MIN = 60_000
-const NOW = Date.now()
-const today = new Date()
-today.setHours(0, 0, 0, 0)
-const isoDay = (d: Date) => d.toLocaleDateString('en-CA') // YYYY-MM-DD, local time
-const daysAgo = (n: number) => {
-  const d = new Date(today)
-  d.setDate(d.getDate() - n)
-  return d
-}
-
-export const brand: Brand = { name: 'Rajat Silver', adAccountId: 'act_4418820193', connected: true, lastSyncAt: new Date(NOW - 18 * MIN).toISOString() }
-
-// The 12 Salvera collections. Each is a product line the campaigns promote.
-export const categories: Category[] = [
-  { id: 'k1', name: 'Imperial', color: '#4a2e33', icon: 'Sofa', avgTicket: 85000 },            // Furniture
-  { id: 'k2', name: 'Regalia', color: '#9c6b74', icon: 'Glasses', avgTicket: 9000 },           // Accessories
-  { id: 'k3', name: 'Sannjh', color: '#a4603f', icon: 'Gem', avgTicket: 52000 },               // Bridal
-  { id: 'k4', name: 'Uphaar', color: '#c08a3e', icon: 'Gift', avgTicket: 4200 },               // Gifting
-  { id: 'k5', name: 'Moksha', color: '#a8576b', icon: 'Landmark', avgTicket: 18000 },          // Idols & temple decor
-  { id: 'k6', name: 'Sadaa', color: '#4f93b5', icon: 'Sparkles', avgTicket: 5200 },            // Trending sterling silver jewellery
-  { id: 'k7', name: 'Maheer', color: '#7a6ca8', icon: 'Diamond', avgTicket: 3800 },            // 925 delicate
-  { id: 'k8', name: 'Nrutya', color: '#5a6a4e', icon: 'Flower2', avgTicket: 2400 },            // Oxidised
-  { id: 'k9', name: 'Varchas', color: '#7d8a4e', icon: 'User', avgTicket: 9000 },              // Men's
-  { id: 'k10', name: 'Zoeya', color: '#5a9e86', icon: 'Baby', avgTicket: 2800 },               // Kids
-  { id: 'k11', name: 'Aangan', color: '#8a7b6a', icon: 'Home', avgTicket: 14000 },             // Home decor
-  { id: 'k12', name: 'Dawaat', color: '#8a8378', icon: 'UtensilsCrossed', avgTicket: 26000 },  // Utensils
-]
-const categoryById = new Map(categories.map(c => [c.id, c]))
-
-export const users: User[] = [
-  // Sign-in emails: owner@gmail.com / manager@gmail.com / sales@gmail.com (any password).
-  { id: 'u1', name: 'Rakesh Soni', email: 'owner@gmail.com', role: 'Owner', managerId: null },
-  { id: 'u2', name: 'Kabir Shah', email: 'kabir@rajatsilver.in', role: 'Marketing', managerId: 'u1' },
-  { id: 'u3', name: 'Meena Agarwal', email: 'manager@gmail.com', role: 'Manager', managerId: 'u1' },
-  { id: 'u4', name: 'Imran Qureshi', email: 'sales@gmail.com', role: 'Sales', managerId: 'u3' },
-  { id: 'u5', name: 'Priya Jain', email: 'priya@rajatsilver.in', role: 'Sales', managerId: 'u3' },
-  { id: 'u6', name: 'Vikas Sharma', email: 'vikas@rajatsilver.in', role: 'Sales', managerId: 'u4' },
-  { id: 'u7', name: 'Sunita Rathore', email: 'sunita@rajatsilver.in', role: 'Sales', managerId: 'u4' },
-  { id: 'u8', name: 'Arjun Mathur', email: 'arjun@rajatsilver.in', role: 'Sales', managerId: 'u5' },
-]
-// Hierarchy: u1 → u3 → u4 → u6/u7, u5 → u8. u2 is a direct report of the owner.
-// Typical minutes to first contact per person: makes the speed leaderboard interesting.
-const repSpeed: Record<string, number> = { u1: 40, u3: 12, u4: 30, u5: 6, u6: 18, u7: 45, u8: 110 }
-// Sales staff who take enquiries (owner u1 can too; marketing u2 does not).
-const salesIds = ['u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u1']
-
-export const settings: Settings = { slaMinutes: 15, hotScore: 70, silverRate: 105000, silverRateAt: null }
-
-type Shock = 'spike' | 'fatigue' | undefined
-// [category, name, status, lead quality 0..1, conversion multiplier, days since paused, shock]
-const campaignSpecs: [string, string, Campaign['status'], number, number, number?, Shock?][] = [
-  ['k1', 'Imperial Furniture – Lead Form', 'ACTIVE', 0.5, 0.7],
-  ['k1', 'Imperial – Showroom Walkthrough Reels', 'ACTIVE', 0.4, 0.6, undefined, 'fatigue'],
-  ['k2', 'Regalia Accessories – Carousel', 'ACTIVE', 0.55, 1.3],
-  ['k3', 'Sannjh Bridal – Wedding Season', 'ACTIVE', 0.5, 0.6],
-  ['k3', 'Sannjh – Broad Interests', 'ACTIVE', 0.22, 0.5],
-  ['k4', 'Uphaar Gifting – Festive Offer', 'ACTIVE', 0.7, 1.8],
-  ['k5', 'Moksha Idols & Temple Decor – Lead Form', 'ACTIVE', 0.6, 0.9],
-  ['k6', 'Sadaa Sterling Silver – Retargeting', 'ACTIVE', 0.68, 1.5],
-  ['k6', 'Sadaa – Trending Reels, Women 22–40', 'ACTIVE', 0.45, 1.2],
-  ['k7', 'Maheer 925 Delicate – Instagram', 'ACTIVE', 0.5, 1.2],
-  ['k8', 'Nrutya Oxidised – Carousel', 'ACTIVE', 0.55, 1.3],
-  ['k9', "Varchas Men's – Video", 'ACTIVE', 0.4, 0.8, undefined, 'spike'],
-  ['k10', 'Zoeya Kids – Nazariya & Kada', 'ACTIVE', 0.5, 1.0],
-  ['k11', 'Aangan Home Decor – Lookalike', 'ACTIVE', 0.4, 0.8],
-  ['k12', 'Dawaat Utensils – Gifting', 'ACTIVE', 0.45, 0.6, undefined, 'fatigue'],
-]
-const creatives: Record<string, [headline: string, text: string][]> = {
-  k1: [['Imperial silver furniture', 'Handcrafted silver-clad chairs, tables and swings. Book a showroom walkthrough.'], ['Heirloom silver furniture', 'Royal designs for your living room. Custom orders welcome.']],
-  k2: [['Regalia silver accessories', 'Clutches, frames and décor accents in pure silver. 200+ designs in store.'], ['Statement silver accessories', 'Gift-ready and hallmarked. Visit our showroom.']],
-  k3: [['Sannjh bridal silver', 'Payal, bichhiya, kamarbandh and more. Book a private bridal viewing.'], ['Complete bridal silver set', 'Custom weight and designs. Talk to our bridal expert.']],
-  k4: [['Uphaar gifting silver from 10g', "Coins, frames and gift boxes at today's silver rate. Reserve now."], ['Gift silver this festive season', 'Corporate and personal gifting. Gift-boxed and hallmarked.']],
-  k5: [['Moksha silver idols & temple decor', 'Lakshmi-Ganesh idols, diyas and pooja articles. Hallmarked.'], ['Complete pooja thali sets', 'Diya, kalash, bell and plate in pure silver. Perfect for Diwali.']],
-  k6: [['Sadaa trending sterling silver', "Fair making charges. Exchange your old silver at today's rate."], ['Daily-wear sterling pieces', 'Lightweight, skin-friendly, hallmarked. Book a store visit.']],
-  k7: [['Maheer 925 delicate jewellery', 'Minimal everyday pieces in 925 silver. Engraving free this month.'], ['Delicate silver for everyday', 'Chains, studs and rings. 200+ designs in store.']],
-  k8: [['Nrutya oxidised silver', 'Bold oxidised designs, stone-set and polished. Try it on in store.'], ['Oxidised statement pieces', 'Traditional and modern designs. Visit our showroom.']],
-  k9: [["Varchas men's silver", 'Solid silver kada, 40g to 120g, and bracelets. Try it on in store.'], ['Bold silver for men', 'Oxidised, polished and stone-set designs.']],
-  k10: [['Zoeya kids silver', 'Nazariya, baby kada and anklets with a safety finish.']],
-  k11: [['Aangan silver home decor', 'Photo frames, bowls and showpieces in pure silver. Ideal for gifting.'], ['Silver décor for your home', 'Handcrafted accents that last generations.']],
-  k12: [['Dawaat silver utensils', 'Glass, thali, bowls and spoons. Ideal for weddings and gifting.'], ['Silver glass for good health', 'Pure silver tumblers from 50g. Gift-boxed.']],
-}
-const audiences = ['Women 22–45, Jaipur 25km', 'Men 25–50, Jaipur', 'Lookalike 1% – Buyers', 'Custom: Website visitors 30d', 'Interest: Wedding planning', 'Advantage+ audience', 'Engaged IG followers']
-const ctas: Ad['cta'][] = ['Get offer', 'Learn more', 'Book now', 'Send message', 'Shop now']
-const formats: Ad['format'][] = ['Image', 'Video', 'Carousel', 'Reel']
-
-interface AdModel { ad: Ad; baseSpend: number; ctr: number; cvr: number; pausedAgo: number; shock: Shock; fatigue: boolean }
-const models: AdModel[] = []
-const quality: Record<string, number> = {}
-
-export const campaigns: Campaign[] = campaignSpecs.map(([categoryId, name, status, q, conv, pausedAgo = -1, shock], i) => {
-  const id = `c${i + 1}`
-  quality[id] = q
-  let baseSum = 0
-  const adSets: AdSet[] = Array.from({ length: 2 + Math.floor(rand() * 2) }, (_, j) => {
-    const adSetId = `${id}-as${j + 1}`
-    const audience = pick(audiences)
-    const ads: Ad[] = Array.from({ length: 2 + Math.floor(rand() * 2) }, (_, k) => {
-      const [headline, primaryText] = pick(creatives[categoryId])
-      const ad: Ad = {
-        id: `${adSetId}-ad${k + 1}`, adSetId, campaignId: id, categoryId,
-        name: `${headline.replace(/[·.,!:₹'"]/g, '').split(/\s+/).slice(0, 3).join(' ')} – ${pick(['V1', 'V2', 'Hindi', 'EN'])}`,
-        format: pick(formats), status, headline, primaryText, cta: pick(ctas), hue: Math.floor(between(15, 50)),
-      }
-      const baseSpend = between(40, 120)
-      baseSum += baseSpend
-      models.push({ ad, baseSpend, ctr: between(0.8, 2.6), cvr: conv * between(0.05, 0.12), pausedAgo, shock, fatigue: shock === 'fatigue' ? k === 0 : rand() < 0.04 })
-      return ad
-    })
-    return { id: adSetId, campaignId: id, name: `${audience.split(',')[0]} – ${pick(['Mobile', 'All placements', 'Feeds', 'Stories'])}`, audience, status, ads }
-  })
-  return {
-    id, categoryId, name, status, adSets,
-    dailyBudget: Math.round((baseSum * between(0.92, 1.4)) / 50) * 50,
-    objective: pick(['Lead generation', 'Lead generation', 'Messages'] as const),
-    platform: pick(['Facebook + Instagram', 'Instagram', 'Facebook'] as const),
-    createdAt: daysAgo(DAYS + Math.floor(rand() * 40)).toISOString(),
-  } satisfies Campaign
-})
-const campaignById = new Map(campaigns.map(c => [c.id, c]))
-
-// Daily insights per ad. Leads are allocated afterwards so CRM leads == insight leads.
-const expected: number[] = []
-export const insights: Insight[] = []
-for (let d = DAYS - 1; d >= 0; d--) {
-  const date = daysAgo(d)
-  const weekday = [1.1, 0.95, 0.95, 1, 1, 1.05, 1.15][date.getDay()] // weekends are busier for jewellery
-  const festive = 0.85 + ((DAYS - d) / DAYS) * 0.45 // ramp into Dhanteras / Diwali
-  for (const m of models) {
-    if (m.pausedAgo >= 0 && d < m.pausedAgo) continue
-    const spike = m.shock === 'spike' && d < 7
-    const fatigue = m.fatigue ? 1 - 0.55 * Math.max(0, (35 - d) / 35) : 1
-    const spend = m.baseSpend * weekday * festive * between(0.75, 1.25) * (spike ? 1.2 : 1)
-    const impressions = Math.round((spend / between(90, 160)) * 1000)
-    const clicks = Math.round(impressions * (m.ctr / 100) * fatigue * between(0.85, 1.15))
-    expected.push(clicks * m.cvr * (spike ? 0.35 : 1))
-    insights.push({ date: isoDay(date), categoryId: m.ad.categoryId, campaignId: m.ad.campaignId, adSetId: m.ad.adSetId, adId: m.ad.id, spend: round2(spend), impressions, clicks, ctr: 0, cpc: 0, leads: 0, cpl: 0 })
-  }
-}
-
-const firstNames = ['Pooja', 'Anjali', 'Ritu', 'Kavita', 'Sunita', 'Neha', 'Priyanka', 'Komal', 'Swati', 'Rekha', 'Divya', 'Shalini', 'Mamta', 'Rahul', 'Amit', 'Vikram', 'Rohit', 'Manish', 'Sanjay', 'Gaurav', 'Ankit', 'Deepika', 'Monika', 'Bhavna', 'Nikita', 'Sapna', 'Yogesh', 'Lalit', 'Seema', 'Harsh']
-const lastNames = ['Sharma', 'Agarwal', 'Jain', 'Gupta', 'Khandelwal', 'Rathore', 'Shekhawat', 'Meena', 'Saini', 'Mathur', 'Goyal', 'Mittal', 'Choudhary', 'Kumawat', 'Soni', 'Bansal', 'Verma']
-const noteTexts = ['Wants to see designs on WhatsApp first.', 'Coming with family on Sunday.', 'Asked about making charges per gram.', 'Wants to exchange old silver.', 'Comparing with another shop in Johari Bazaar.', 'Gift for sister, budget around ₹5,000.', 'Needs it before the wedding date.', 'Not reachable, try evening.']
-const saleItems: Record<string, string[]> = {
-  k1: ['Silver-clad chair', 'Silver swing (jhula)', 'Carved silver table'], k2: ['Silver clutch', 'Silver photo frame', 'Décor accent'],
-  k3: ['Bridal payal + bichhiya', 'Kamarbandh', 'Full bridal set'], k4: ['Silver coin 10g', 'Silver coin 20g', 'Gift box with coins'],
-  k5: ['Lakshmi-Ganesh idol', 'Pooja thali set', 'Silver diya pair'], k6: ['Rope chain 20"', 'Sterling bracelet', 'Daily-wear anklet'],
-  k7: ['Delicate studs', 'Thin chain 18"', 'Minimal ring'], k8: ['Oxidised ring', 'Oxidised kada', 'Stone-set pendant'],
-  k9: ["Men's kada", "Men's bracelet", 'Oxidised kada'], k10: ['Baby kada pair', 'Nazariya bracelet'],
-  k11: ['Silver photo frame', 'Silver showpiece', 'Silver bowl'], k12: ['Silver glass set', 'Dinner set (6 pcs)', 'Silver bowl'],
-}
-
-const statusPath: Record<LeadStatus, LeadStatus[]> = {
-  New: [], Contacted: ['Contacted'], 'Visit booked': ['Contacted', 'Visit booked'], Visited: ['Contacted', 'Visit booked', 'Visited'],
-  Purchased: ['Contacted', 'Visit booked', 'Visited', 'Purchased'], Lost: ['Contacted', 'Lost'],
-}
-const INTENTS: Intent[] = ['High', 'Medium', 'Low']
-const LEAD_COUNT = 380
-const totalExpected = expected.reduce((a, b) => a + b, 0)
-let leadNo = 1000
-
-function makeSale(categoryId: string, at: number): Sale {
-  const amount = Math.round((categoryById.get(categoryId)!.avgTicket * Math.exp((rand() - 0.5) * 1.1)) / 50) * 50
-  const perGram = (settings.silverRate / 1000) * between(1.18, 1.35) // metal + making charges
-  return { amount, grams: Math.round(amount / perGram), items: pick(saleItems[categoryId]), at: new Date(at).toISOString() }
-}
-
-function makeLead(opts: { categoryId: string; campaignId: string | null; adSetId: string | null; adId: string | null; created: Date; source: Lead['source'] }): Lead {
-  const { created, categoryId } = opts
-  const q = opts.campaignId ? quality[opts.campaignId] : 0.6
-  const id = `L${++leadNo}`
-  const age = (NOW - created.getTime()) / (24 * HOUR)
-
-  const r = rand()
-  const intentIdx = r < q * 0.6 ? 0 : r < q * 0.6 + 0.35 ? 1 : 2
-  const intent = INTENTS[intentIdx]
-  const answers = [
-    { q: 'What are you looking for?', a: categoryById.get(categoryId)!.name },
-    { q: 'When do you plan to buy?', a: ['This week', 'This month', 'Just browsing'][intentIdx] },
-    { q: 'Budget', a: pick(['Under ₹3,000', '₹3,000 – ₹10,000', '₹10,000 – ₹50,000', '₹50,000+']) },
-    { q: 'Occasion', a: pick(['Gift', 'Wedding', 'Festival', 'Self', 'Pooja']) },
-  ]
-
-  let status: LeadStatus
-  if (age < 1.5) status = rand() < 0.6 ? 'New' : rand() < 0.7 ? 'Contacted' : 'Visit booked'
-  else {
-    const engage = q * (intent === 'High' ? 1.35 : intent === 'Low' ? 0.45 : 1)
-    status = rand() < 0.22 ? 'Contacted'
-      : rand() < engage ? weighted<LeadStatus>(['Visit booked', 'Visited', 'Purchased'], age < 6 ? [0.45, 0.2, 0.35] : [0.08, 0.27, 0.65])
-      : 'Lost'
-  }
-  const assigneeId = status === 'New' && rand() < 0.35 ? null : pick(salesIds)
-  const by = assigneeId ?? 'u1'
-  const first = pick(firstNames)
-  const last = pick(lastNames)
-
-  let t = created.getTime()
-  let firstContactAt: string | null = null
-  let visitAt: string | null = null
-  let sale: Sale | null = null
-  const activities: Activity[] = [{ id: `${id}-a0`, type: 'created', text: opts.source === 'Meta Lead Ad' ? 'Enquiry via Instant Form' : `Lead added (${opts.source})`, at: created.toISOString() }]
-  const path: LeadStatus[] = status === 'Lost' && rand() < 0.3 ? ['Contacted', 'Visit booked', 'Visited', 'Lost'] : statusPath[status]
-  path.forEach((s, k) => {
-    if (s === 'Contacted') {
-      t = Math.min(t + (repSpeed[by] ?? 30) * Math.exp((rand() - 0.5) * 2.4) * MIN, NOW)
-      firstContactAt = new Date(t).toISOString()
-      const viaCall = rand() < 0.6
-      activities.push({ id: `${id}-c`, type: viaCall ? 'call' : 'whatsapp', text: viaCall ? `Call · ${pick(['Interested', 'Callback requested', 'Interested'])}` : 'WhatsApp · Sent catalogue', at: firstContactAt, byId: by })
-    } else if (s === 'Visit booked') {
-      t = Math.min(t + between(1, 20) * HOUR, NOW)
-      // Booked visits for current leads are mostly upcoming; for older leads they already happened.
-      const v = new Date(status === 'Visit booked' ? NOW + between(-20, 72) * HOUR : t + between(20, 72) * HOUR)
-      v.setHours(Math.min(20, Math.max(11, v.getHours())), rand() < 0.5 ? 0 : 30, 0, 0)
-      visitAt = v.toISOString()
-      activities.push({ id: `${id}-v`, type: 'visit', text: `Store visit booked for ${v.toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}`, at: new Date(t).toISOString(), byId: by })
-    } else if (s === 'Visited' && visitAt) t = Math.min(Math.max(t, new Date(visitAt).getTime()), NOW)
-    else t = Math.min(t + between(0.5, 30) * HOUR, NOW)
-    if (s === 'Purchased') {
-      sale = makeSale(categoryId, t)
-      activities.push({ id: `${id}-s`, type: 'sale', text: `Purchased ${sale.items} · ₹${sale.amount.toLocaleString('en-IN')} · ${sale.grams}g`, at: sale.at, byId: by })
-    }
-    activities.push({ id: `${id}-a${k + 1}`, type: 'status', text: `Status changed to ${s}`, at: new Date(t).toISOString(), byId: by })
-  })
-  const notes = status !== 'New' && rand() < 0.5 ? [{ id: `${id}-n1`, text: pick(noteTexts), at: new Date(Math.min(t + HOUR, NOW)).toISOString(), byId: by }] : []
-
-  return {
-    id, categoryId, source: opts.source,
-    name: `${first} ${last}`,
-    phone: `+91 ${pick(['98', '97', '99', '94', '88', '70'])}${String(Math.floor(rand() * 1e8)).padStart(8, '0')}`,
-    email: `${first}.${last}${Math.floor(rand() * 90 + 10)}@${pick(['gmail.com', 'gmail.com', 'yahoo.in', 'outlook.com'])}`.toLowerCase(),
-    campaignId: opts.campaignId, adSetId: opts.adSetId, adId: opts.adId,
-    status,
-    lostReason: status === 'Lost' ? (path.includes('Visited') ? pick(['Price / making charges too high', 'Design not available'] as const) : pick(LOST_REASONS)) : null,
-    assigneeId, visitAt, sale, answers, intent, firstContactAt, notes,
-    activities: activities.sort((a, b) => b.at.localeCompare(a.at)),
-    createdAt: created.toISOString(),
-  }
-}
-
-const metaLeads = Array.from({ length: LEAD_COUNT }, () => {
-  // Weighted pick of an insight row by its expected leads.
-  let x = rand() * totalExpected
-  let idx = 0
-  while (x > expected[idx] && idx < expected.length - 1) x -= expected[idx++]
-  const row = insights[idx]
-  row.leads++
-  const created = new Date(`${row.date}T00:00:00`)
-  created.setTime(Math.min(created.getTime() + between(8, 22) * HOUR, NOW - between(2, 30) * MIN))
-  return makeLead({ categoryId: campaignById.get(row.campaignId)!.categoryId, campaignId: row.campaignId, adSetId: row.adSetId, adId: row.adId, created, source: 'Meta Lead Ad' })
-})
-const offlineLeads = Array.from({ length: 18 }, () =>
-  makeLead({ categoryId: pick(categories).id, campaignId: null, adSetId: null, adId: null, created: new Date(NOW - between(1, DAYS * 24) * HOUR), source: pick(['Walk-in', 'Phone call', 'Referral'] as const) }),
-)
-export const leads: Lead[] = [...metaLeads, ...offlineLeads].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-
-for (const r of insights) {
-  r.ctr = r.impressions ? round2((r.clicks / r.impressions) * 100) : 0
-  r.cpc = r.clicks ? round2(r.spend / r.clicks) : 0
-  r.cpl = r.leads ? round2(r.spend / r.leads) : 0
-}
-
-// Next step for every open lead; some overdue, some today, some upcoming (shop hours only).
-const nextSteps: Partial<Record<LeadStatus, [Task['type'], string][]>> = {
-  New: [['call', 'First call'], ['whatsapp', 'Send catalogue on WhatsApp']],
-  Contacted: [['call', 'Follow-up call'], ['whatsapp', 'Share designs & price'], ['call', 'Invite for store visit']],
-  Visited: [['call', 'Follow up after visit'], ['whatsapp', 'Send photos of shortlisted designs']],
-}
-let taskNo = 0
-export const tasks: Task[] = leads.flatMap((l): Task[] => {
-  if (l.status === 'Purchased' || l.status === 'Lost') return []
-  if (l.status === 'Visit booked' && l.visitAt) return [{ id: `t${++taskNo}`, leadId: l.id, title: 'Store visit', type: 'visit', dueAt: l.visitAt, done: false, assigneeId: l.assigneeId }]
-  if (l.status !== 'New' && rand() < 0.15) return []
-  const [type, title] = pick(nextSteps[l.status]!)
-  const due = new Date(NOW + between(-50, 120) * HOUR)
-  due.setHours(Math.min(19, Math.max(10, due.getHours())), rand() < 0.5 ? 0 : 30, 0, 0)
-  return [{ id: `t${++taskNo}`, leadId: l.id, title, type, dueAt: due.toISOString(), done: false, assigneeId: l.assigneeId }]
+const lead = (
+  id: string,
+  name: string,
+  phone: string,
+  source: string,
+  campaign: string,
+  adset: string,
+  collection: string,
+  stage: Stage,
+  status: Lead['status'],
+  rep: string,
+  received: string,
+  when: Lead['when'],
+  next: string,
+  late = false,
+): Lead => ({
+  id,
+  name,
+  phone,
+  source,
+  campaign,
+  adset,
+  collection,
+  stage,
+  status,
+  rep,
+  received,
+  when,
+  next,
+  late,
 })
 
-export const templates: Template[] = [
-  { id: 'tp1', name: 'Catalogue – new enquiry', channel: 'whatsapp', stage: 'New', body: 'Namaste {{first_name}} ji, this is {{agent}} from {{brand}}. Thank you for your enquiry! Sharing our latest designs. Would you like to visit the showroom this week?' },
-  { id: 'tp2', name: 'Missed your call', channel: 'whatsapp', stage: 'Contacted', body: 'Namaste {{first_name}} ji, I tried calling you from {{brand}}. Please share a good time to talk. – {{agent}}' },
-  { id: 'tp3', name: 'Book a store visit', channel: 'whatsapp', stage: 'Contacted', body: 'Hi {{first_name}} ji, come see the full collection at {{brand}}. Reply with a day and time and I will keep the designs ready for you. – {{agent}}' },
-  { id: 'tp4', name: 'Visit reminder', channel: 'whatsapp', stage: 'Visit booked', body: 'Hi {{first_name}} ji, a reminder of your visit to {{brand}}. Our team will be waiting for you.' },
-  { id: 'tp5', name: 'After-visit follow-up', channel: 'whatsapp', stage: 'Visited', body: 'Thank you for visiting {{brand}}, {{first_name}} ji! Sharing photos of the designs you liked. Let me know if you would like me to keep any aside. – {{agent}}' },
-  { id: 'tp6', name: 'Thank you for your purchase', channel: 'whatsapp', stage: 'Purchased', body: 'Thank you for shopping with {{brand}}, {{first_name}} ji! 🙏 Remember: free polishing for life at our store.' },
-  { id: 'tp7', name: 'Dhanteras offer', channel: 'whatsapp', stage: 'Any', body: "Shubh Dhanteras {{first_name}} ji! Silver coins and pooja articles at today's rate at {{brand}}. Reserve now and visit us soon." },
-  { id: 'tp8', name: 'Catalogue by email', channel: 'email', stage: 'New', subject: 'Your enquiry with {{brand}}', body: 'Namaste {{first_name}} ji,\n\nThank you for your interest in {{brand}}. Please find our latest catalogue attached. We would be happy to welcome you at our showroom.\n\nRegards,\n{{agent}}' },
+export const LEADS: Lead[] = [
+  lead('l1', 'Riya Patel', '+91 98250 •••14', 'Instant Form · Instagram', 'Sannjh Bridal – Lead Form', 'Brides-to-be 22–32 · Ahmedabad', 'Sannjh', 'Visit scheduled', 'Hot', 'Neha Shah', 'Today, 9:12 AM', 'today', 'Store visit · today 11:30 AM'),
+  lead('l2', 'Ishita Vyas', '+91 97129 •••90', 'Instant Form · Facebook', 'Sannjh Bridal – Lead Form', 'Lookalike 1% – past buyers', 'Sannjh', 'New lead', 'Warm', 'Unassigned', 'Today, 9:40 AM', 'today', 'Not contacted · waiting 1 hr', true),
+  lead('l3', 'Kinjal Shah', '+91 99099 •••37', 'Facebook Messenger', 'Uphaar Gifting – Messenger', 'Festive gifting · Gujarat', 'Uphaar', 'Visit scheduled', 'Hot', 'Neha Shah', 'Today, 8:40 AM', 'today', 'Store visit · today 4:00 PM'),
+  lead('l4', 'Aarav Desai', 'No phone yet · @aarav.d', 'Instagram DM', 'Regalia – Instagram DM', 'Engaged Instagram followers', 'Regalia', 'New lead', 'Warm', 'Unassigned', 'Today, 8:05 AM', 'today', 'Not replied · waiting 2 hrs', true),
+  lead('l5', 'Kunal Shah', '+91 90999 •••21', 'Facebook comment', 'Sannjh Bridal – Lead Form', 'Wedding planning · Gujarat', 'Sannjh', 'New lead', 'Warm', 'Ravi Mehta', 'Today, 7:48 AM', 'today', 'First reply overdue', true),
+  lead('l6', 'Harsh Mehta', '+91 98795 •••02', 'Walk-in & phone', 'No campaign', '—', 'Imperial', 'Visit scheduled', 'Hot', 'Amit Patel', '12 Nov', 'week', 'Store visit · today 1:00 PM'),
+  lead('l7', 'Tanvi Shah', '+91 94260 •••58', 'Instagram DM', 'Regalia – Instagram DM', 'Engaged Instagram followers', 'Maheer', 'Messaged', 'Hot', 'Sneha Rao', '12 Nov', 'week', 'Call 1 · today 12:30 PM'),
+  lead('l8', 'Bhavin Soni', '+91 99250 •••76', 'Instant Form · Instagram', 'Sannjh Bridal – Lead Form', 'Brides-to-be 22–32 · Ahmedabad', 'Sannjh', 'Messaged', 'Warm', 'Ravi Mehta', '11 Nov', 'week', 'Call 1 · today 2:00 PM'),
+  lead('l9', 'Heena Kapadia', '+91 97250 •••11', 'Website', 'New Traffic Campaign', 'Website visitors', 'Sadaa', 'Call 1', 'Cold', 'Sneha Rao', '12 Nov', 'week', 'Call 2 · 14 Nov, 11:00 AM'),
+  lead('l10', 'Manish Rana', '+91 90160 •••45', 'Walk-in & phone', 'No campaign', '—', 'Varchas', 'Call 2', 'Warm', 'Amit Patel', '10 Nov', 'month', 'Call 3 · today 3:00 PM'),
+  lead('l11', 'Meet Trivedi', '+91 98983 •••60', 'Facebook Messenger', 'Uphaar Gifting – Messenger', 'Festive gifting · Gujarat', 'Uphaar', 'Call 3', 'Hot', 'Ravi Mehta', '11 Nov', 'week', 'Call 4 · overdue since yesterday', true),
+  lead('l12', 'Parth Vora', '+91 97235 •••88', 'Facebook Messenger', 'Uphaar Gifting – Messenger', 'Corporate gifting', 'Uphaar', 'Call 4', 'Warm', 'Ravi Mehta', '8 Nov', 'month', 'Last try · today 5:00 PM'),
+  lead('l13', 'Dev Joshi', '+91 99786 •••33', 'Instant Form · Facebook', 'Moksha Temple Decor – Lead Form', 'Temple décor · Gujarat', 'Moksha', 'Visit scheduled', 'Hot', 'Amit Patel', '11 Nov', 'week', 'Store visit · today 5:30 PM'),
+  lead('l14', 'Pooja Desai', '+91 94080 •••19', 'Instagram DM', 'Regalia – Instagram DM', 'Engaged Instagram followers', 'Regalia', 'Visit scheduled', 'Hot', 'Sneha Rao', '12 Nov', 'week', 'Store visit · today 6:30 PM'),
+  lead('l15', 'Hiral Patel', '+91 98240 •••71', 'Instant Form · Instagram', 'Sannjh Bridal – Lead Form', 'Brides-to-be 22–32 · Ahmedabad', 'Sannjh', 'Purchased', 'Hot', 'Neha Shah', '3 Nov', 'month', 'Bought payal + bichhiya · ₹68,500'),
+  lead('l16', 'Ketan Shah', '+91 90333 •••04', 'Walk-in & phone', 'No campaign', '—', 'Imperial', 'Purchased', 'Hot', 'Amit Patel', '1 Nov', 'month', 'Bought silver swing · ₹2,40,000'),
+  lead('l17', 'Janvi Modi', '+91 97370 •••52', 'Instant Form · Instagram', 'Moksha Temple Decor – Lead Form', 'Temple décor · Gujarat', 'Moksha', 'No reply', 'Cold', 'Sneha Rao', '9 Nov', 'month', 'Try once more · overdue', true),
+  lead('l18', 'Rohan Bhatt', '+91 99099 •••18', 'Facebook Messenger', 'Uphaar Gifting – Messenger', 'Festive gifting · Gujarat', 'Uphaar', 'Not interested', 'Cold', 'Amit Patel', '4 Nov', 'month', 'Reason: price too high'),
+  lead('l19', 'Nidhi Parikh', '+91 98791 •••26', 'Instant Form · Instagram', 'Sannjh Bridal – Lead Form', 'Wedding planning · Gujarat', 'Sannjh', 'Future contact', 'Warm', 'Neha Shah', '10 Nov', 'month', 'Contact again · 5 Jan 2027'),
+  lead('l20', 'Mitali Shah', '+91 97120 •••63', 'Instant Form · Instagram', 'Sannjh Bridal – Lead Form', 'Brides-to-be 22–32 · Ahmedabad', 'Sannjh', 'Visit scheduled', 'Warm', 'Neha Shah', '12 Nov', 'week', 'Store visit · tomorrow 12:00 PM'),
+  lead('l21', 'Bhumi Shah', '+91 94270 •••09', 'Instant Form · Instagram', 'Sannjh Bridal – Lead Form', 'Wedding planning · Gujarat', 'Sannjh', 'Future contact', 'Warm', 'Neha Shah', '7 Nov', 'month', 'Contact again · 20 Nov'),
+  lead('l22', 'Hetal Mehta', '+91 99134 •••47', 'Facebook Messenger', 'Uphaar Gifting – Messenger', 'Festive gifting · Gujarat', 'Uphaar', 'Call 1', 'Warm', 'Neha Shah', '12 Nov', 'week', 'Store visit · 17 Nov 4:00 PM'),
 ]
 
-// Festive calendar. Lunar dates shift every year: approx=true means "confirm with the panchang".
-export const festiveDates: FestiveDate[] = [
-  { id: 'f1', name: 'Dhanteras', date: '2026-11-06', approx: true, tip: 'Peak day for gifting coins and temple decor. Raise budgets 3–5 days before.', categoryIds: ['k4', 'k5', 'k12'] },
-  { id: 'f2', name: 'Diwali', date: '2026-11-08', approx: true, tip: 'Gifting: coins, utensils, pooja sets.', categoryIds: ['k4', 'k5', 'k12'] },
-  { id: 'f3', name: 'Bhai Dooj', date: '2026-11-11', approx: true, tip: "Gifts for brothers: men's silver and gifting.", categoryIds: ['k9', 'k4'] },
-  { id: 'f4', name: 'Wedding season begins', date: '2026-11-20', approx: true, tip: 'Push bridal (Sannjh) and accessories through February.', categoryIds: ['k3', 'k2', 'k6'] },
-  { id: 'f5', name: 'Christmas & New Year gifting', date: '2026-12-25', approx: false, tip: 'Corporate gifting: home decor and utensils.', categoryIds: ['k4', 'k11', 'k12'] },
-  { id: 'f6', name: 'Makar Sankranti', date: '2027-01-14', approx: false, tip: 'Good time for kids silver and gifts.', categoryIds: ['k10', 'k4'] },
-  { id: 'f7', name: "Valentine's Day", date: '2027-02-14', approx: false, tip: 'Delicate 925 and oxidised pieces with initials.', categoryIds: ['k7', 'k8'] },
-  { id: 'f8', name: 'Akshaya Tritiya', date: '2027-05-09', approx: true, tip: 'Auspicious buying day: sterling jewellery and furniture.', categoryIds: ['k6', 'k1', 'k4'] },
+/** Totals shown in column headers on the kanban — the full book, not just the sample rows. */
+export const STAGE_TOTALS: Record<Stage, number> = {
+  'New lead': 24,
+  Messaged: 46,
+  'Call 1': 52,
+  'Call 2': 38,
+  'Call 3': 21,
+  'Call 4': 12,
+  'Visit scheduled': 23,
+  Purchased: 32,
+  'No reply': 34,
+  'Not interested': 29,
+  'Future contact': 31,
+}
+
+export const TASKS: Task[] = [
+  { id: 't1', time: '9:30 AM', type: 'Call', title: 'First call — not made yet', lead: 'Kunal Shah', context: 'Sannjh · Facebook comment', rep: 'Ravi Mehta', due: 'overdue', done: false },
+  { id: 't2', time: '10:00 AM', type: 'Message', title: 'Reply to Instagram DM', lead: 'Aarav Desai', context: 'Regalia · waiting 2 hrs', rep: 'Unassigned', due: 'overdue', done: false },
+  { id: 't3', time: '10:30 AM', type: 'Call', title: 'Call 4 — last try', lead: 'Meet Trivedi', context: 'Uphaar · overdue since yesterday', rep: 'Ravi Mehta', due: 'overdue', done: false },
+  { id: 't4', time: '10:45 AM', type: 'Call', title: 'Try once more before closing', lead: 'Janvi Modi', context: 'Moksha · no reply to 3 calls', rep: 'Sneha Rao', due: 'overdue', done: false },
+  { id: 't5', time: '11:00 AM', type: 'Other', title: 'Keep antique-finish bridal trays ready', lead: 'Riya Patel', context: 'Sannjh · from Mansi', rep: 'Neha Shah', due: 'today', done: true },
+  { id: 't6', time: '11:30 AM', type: 'Site visit', title: 'Store visit', lead: 'Riya Patel', context: 'Sannjh · confirmed', rep: 'Neha Shah', due: 'today', done: true },
+  { id: 't7', time: '12:30 PM', type: 'Call', title: 'Call 1', lead: 'Tanvi Shah', context: 'Maheer · Instagram DM', rep: 'Sneha Rao', due: 'today', done: false },
+  { id: 't8', time: '12:45 PM', type: 'Message', title: 'First message or call', lead: 'Ishita Vyas', context: 'Sannjh · new lead', rep: 'Neha Shah', due: 'today', done: false },
+  { id: 't9', time: '1:00 PM', type: 'Site visit', title: 'Store visit', lead: 'Harsh Mehta', context: 'Imperial · confirmed', rep: 'Amit Patel', due: 'today', done: false },
+  { id: 't10', time: '2:00 PM', type: 'Call', title: 'Call 1', lead: 'Bhavin Soni', context: 'Sannjh · Instant Form', rep: 'Ravi Mehta', due: 'today', done: false },
+  { id: 't11', time: '2:30 PM', type: 'Call', title: "Confirm today's 4 PM visit", lead: 'Kinjal Shah', context: 'Uphaar · not confirmed yet', rep: 'Neha Shah', due: 'today', done: false },
+  { id: 't12', time: '3:00 PM', type: 'Call', title: 'Call 3', lead: 'Manish Rana', context: 'Varchas · walk-in', rep: 'Amit Patel', due: 'today', done: false },
+  { id: 't13', time: '4:00 PM', type: 'Site visit', title: 'Store visit', lead: 'Kinjal Shah', context: 'Uphaar · festive gifting', rep: 'Neha Shah', due: 'today', done: false },
+  { id: 't14', time: '5:00 PM', type: 'Call', title: "Confirm tomorrow's 12 PM visit", lead: 'Mitali Shah', context: 'Sannjh', rep: 'Neha Shah', due: 'today', done: false },
+  { id: 't15', time: '5:00 PM', type: 'Call', title: 'Last try', lead: 'Parth Vora', context: 'Uphaar · Messenger', rep: 'Ravi Mehta', due: 'today', done: false },
+  { id: 't16', time: '5:30 PM', type: 'Site visit', title: 'Store visit', lead: 'Dev Joshi', context: 'Moksha temple décor · confirmed', rep: 'Amit Patel', due: 'today', done: false },
+  { id: 't17', time: '6:00 PM', type: 'Message', title: 'Send Sannjh new arrivals', lead: 'Bhumi Shah', context: 'Sannjh · future contact on 20 Nov', rep: 'Neha Shah', due: 'today', done: false },
+  { id: 't18', time: '6:30 PM', type: 'Site visit', title: 'Store visit', lead: 'Pooja Desai', context: 'Regalia accessories · not confirmed', rep: 'Sneha Rao', due: 'today', done: false },
+  { id: 't19', time: 'Sat 14 · 12:00 PM', type: 'Site visit', title: 'Store visit', lead: 'Mitali Shah', context: 'Sannjh', rep: 'Neha Shah', due: 'upcoming', done: false },
+  { id: 't20', time: 'Mon 16 · 11:00 AM', type: 'Call', title: 'Wedding-date check-in', lead: 'Ishita Vyas', context: 'Sannjh', rep: 'Neha Shah', due: 'upcoming', done: false },
+  { id: 't21', time: 'Tue 17 · 4:00 PM', type: 'Site visit', title: 'Store visit', lead: 'Hetal Mehta', context: 'Uphaar', rep: 'Neha Shah', due: 'upcoming', done: false },
+  { id: 't22', time: 'Wed 18 · 12:00 PM', type: 'Future contact', title: 'Contact again', lead: 'Kavya Joshi', context: 'Sannjh', rep: 'Neha Shah', due: 'upcoming', done: false },
+  { id: 't23', time: 'Thu 19 · 11:30 AM', type: 'Site visit', title: 'Store visit', lead: 'Disha Amin', context: 'Sannjh', rep: 'Neha Shah', due: 'upcoming', done: false },
+  { id: 't24', time: 'Fri 20 · 11:00 AM', type: 'Future contact', title: 'Send new arrivals', lead: 'Bhumi Shah', context: 'Sannjh', rep: 'Neha Shah', due: 'upcoming', done: false },
 ]
 
-/**
- * Which product categories each non-owner may work in. The owner (u1) needs no row: they
- * see every category. Managers get a slice of the catalogue; their sales staff inherit the
- * same slice, because a share grants access to one user only, not to their reports.
- */
-const staffWithProducts = ['u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8']
-const meenaProducts = ['k3', 'k6', 'k7', 'k2', 'k1'] // Meena (u3): bridal, sterling, delicate, accessories, furniture
-const vikasProducts = ['k4', 'k9', 'k10', 'k11', 'k12', 'k5', 'k8'] // the other branch
-const managedCategories: string[][] = [
-  meenaProducts,                 // u2 Marketing — same catalogue as the manager they support
-  meenaProducts,                 // u3 Manager
-  meenaProducts,                 // u4 Sales, under u3
-  meenaProducts,                 // u5 Sales, under u3
-  meenaProducts,                 // u6 Sales, under u4
-  meenaProducts,                 // u7 Sales, under u4
-  vikasProducts,                 // u8 Sales, under u5 — deliberately a different slice
+/** Today's confirmed/unconfirmed store visits, as the dashboard lists them. */
+export const VISITS = [
+  { time: '11:30 AM', name: 'Riya Patel', collection: 'Sannjh bridal', rep: 'Neha', confirmed: true },
+  { time: '1:00 PM', name: 'Harsh Mehta', collection: 'Imperial furniture', rep: 'Amit', confirmed: true },
+  { time: '4:00 PM', name: 'Kinjal Shah', collection: 'Uphaar gifting', rep: 'Neha', confirmed: false },
+  { time: '5:30 PM', name: 'Dev Joshi', collection: 'Moksha temple décor', rep: 'Amit', confirmed: true },
+  { time: '6:30 PM', name: 'Pooja Desai', collection: 'Regalia accessories', rep: 'Sneha', confirmed: false },
 ]
 
-// Generic shares table. One row per (module, record, user). Seeded so the Share UI has data to show.
-export const shares: Share[] = [
-  { id: 'sh1', module: 'leads', recordId: leads[0]?.id ?? 'L1001', sharedBy: 'u1', sharedWith: 'u3', permission: 'edit', createdAt: daysAgo(5).toISOString() },
-  { id: 'sh2', module: 'leads', recordId: leads[1]?.id ?? 'L1002', sharedBy: 'u3', sharedWith: 'u4', permission: 'view', createdAt: daysAgo(3).toISOString() },
-  { id: 'sh3', module: 'tasks', recordId: tasks[0]?.id ?? 't1', sharedBy: 'u1', sharedWith: 'u4', permission: 'edit', createdAt: daysAgo(2).toISOString() },
-  // Product access: the owner assigns which categories each person may work in. Without a row
-  // here a non-owner sees nothing, so every working user needs their products granted.
-  ...managedCategories.flatMap((catIds, i) =>
-    catIds.map(id => ({
-      id: `shc-${staffWithProducts[i]}-${id}`,
-      module: 'categories' as const,
-      recordId: id,
-      sharedBy: 'u1',
-      sharedWith: staffWithProducts[i],
-      permission: 'edit' as const,
-      createdAt: daysAgo(20).toISOString(),
-    }))),
+export const SOURCE_COUNTS: Record<'today' | 'week' | 'month', number[]> = {
+  today: [7, 3, 5, 2, 1, 0, 0, 0, 0],
+  week: [35, 17, 23, 12, 4, 1, 2, 2, 0],
+  month: [124, 62, 82, 42, 14, 4, 6, 6, 2],
+}
+
+export const PERIOD_SUMMARY = {
+  today: { label: 'today', leads: 18, leadsNote: '4 more than yesterday', visits: 5, visitsNote: '2 done · 3 still to come' },
+  week: { label: 'this week', leads: 96, leadsNote: '12 more than last week', visits: 23, visitsNote: '9 done · 14 still to come' },
+  month: { label: 'this month', leads: 342, leadsNote: 'Up 12% on the same days last month', visits: 61, visitsNote: '38 done · 23 still to come' },
+}
+
+const CAMPAIGN_VALUE: Record<string, number> = {
+  'Sannjh Bridal – Lead Form': 576000,
+  'Uphaar Gifting – Messenger': 45500,
+  'Regalia – Instagram DM': 36000,
+  'Moksha Temple Decor – Lead Form': 114000,
+  'New Traffic Campaign': 5200,
+}
+
+const rawCampaigns: Omit<Campaign, 'id' | 'value'>[] = [
+  { name: 'Sannjh Bridal – Lead Form', objective: 'Leads', status: 'Active', desc: 'Bridal silver enquiries from brides-to-be in Ahmedabad, through Instagram and Facebook forms.', adsets: 3, adsRunning: 6, adsTotal: 7, spend: 38400, impressions: 214000, clicks: 4100, leads: 138, visits: 26, won: 12 },
+  { name: 'Uphaar Gifting – Messenger', objective: 'Messages', status: 'Active', desc: 'Festive and corporate gifting chats that open in Facebook Messenger.', adsets: 2, adsRunning: 5, adsTotal: 5, spend: 26200, impressions: 172000, clicks: 3010, leads: 82, visits: 14, won: 7 },
+  { name: 'Regalia – Instagram DM', objective: 'Messages', status: 'Active', desc: 'Accessories ads that open an Instagram DM with the store.', adsets: 2, adsRunning: 3, adsTotal: 4, spend: 14800, impressions: 136000, clicks: 2040, leads: 56, visits: 9, won: 4 },
+  { name: 'Moksha Temple Decor – Lead Form', objective: 'Leads', status: 'Active', desc: 'Idols and temple décor enquiries through a short lead form.', adsets: 2, adsRunning: 4, adsTotal: 4, spend: 12600, impressions: 98000, clicks: 1620, leads: 52, visits: 10, won: 6 },
+  { name: 'New Traffic Campaign', objective: 'Traffic', status: 'Active', desc: 'Sends people to the Selverra website collection pages.', adsets: 1, adsRunning: 2, adsTotal: 2, spend: 6900, impressions: 81000, clicks: 1450, leads: 6, visits: 1, won: 1 },
+  { name: 'Imperial Awareness Campaign', objective: 'Awareness', status: 'Active', desc: 'Introduces the Imperial silver furniture collection to new people.', adsets: 1, adsRunning: 2, adsTotal: 2, spend: 9500, impressions: 340000, clicks: 1360, leads: null, visits: null, won: null },
+  { name: 'Brand Awareness Campaign-2', objective: 'Awareness', status: 'Active', desc: 'General Selverra brand introduction to new audiences.', adsets: 1, adsRunning: 1, adsTotal: 1, spend: 7200, impressions: 290000, clicks: 870, leads: null, visits: null, won: null },
+  { name: 'Reel View Campaign', objective: 'Engagement', status: 'Active', desc: 'Gets people watching Selverra reels · 41,000 reel plays.', adsets: 1, adsRunning: 3, adsTotal: 3, spend: 8100, impressions: 220000, clicks: 1100, leads: null, visits: null, won: null },
+  { name: 'Review Campaign', objective: 'Awareness', status: 'Paused', desc: 'Shows real customer reviews to build trust.', adsets: 1, adsRunning: 0, adsTotal: 1, spend: 2300, impressions: 74000, clicks: 300, leads: null, visits: null, won: null },
+]
+
+export const CAMPAIGNS: Campaign[] = rawCampaigns.map((c, i) => ({
+  ...c,
+  id: 'c' + (i + 1),
+  value: CAMPAIGN_VALUE[c.name] ?? null,
+}))
+
+const ad = (
+  name: string,
+  format: Ad['format'],
+  headline: string,
+  cta: string,
+  status: Ad['status'],
+  spend: number,
+  impressions: number,
+  ctr: number,
+  leads: number,
+): Ad => ({ name, format, headline, cta, status, spend, impressions, ctr, leads })
+
+type Ad = AdSet['ads'][number]
+
+/** Ad sets for the Sannjh Bridal campaign — the one campaign the detail screen drills into. */
+export const AD_SETS: AdSet[] = [
+  {
+    id: 'as1',
+    name: 'Brides-to-be 22–32 · Ahmedabad',
+    audience: 'Women 22–32, Ahmedabad 25 km, interest: weddings',
+    budget: '₹600/day',
+    adsLine: '3 of 3 ads running',
+    spend: 19800,
+    ctr: 2.05,
+    leads: 74,
+    visits: 15,
+    won: 7,
+    ads: [
+      ad('Bridal payal reel – V1', 'Reel', 'Sannjh bridal silver', 'Sign up', 'Active', 9200, 48000, 2.3, 38),
+      ad('Full bridal set – carousel', 'Carousel', 'Complete bridal silver set', 'Sign up', 'Active', 6400, 33000, 1.9, 22),
+      ad('Kamarbandh close-up', 'Image', 'Handcrafted kamarbandh', 'Learn more', 'Active', 4200, 24000, 1.65, 14),
+    ],
+  },
+  {
+    id: 'as2',
+    name: 'Wedding planning · Gujarat',
+    audience: 'Women 24–40, Gujarat, interest: wedding planning',
+    budget: '₹400/day',
+    adsLine: '2 of 2 ads running',
+    spend: 12300,
+    ctr: 1.87,
+    leads: 42,
+    visits: 7,
+    won: 3,
+    ads: [
+      ad('Bridal viewing invite – Hindi', 'Video', 'Book a private bridal viewing', 'Sign up', 'Active', 7100, 40000, 1.95, 26),
+      ad('Bridal set – English', 'Image', 'Bridal silver, made to order', 'Sign up', 'Active', 5200, 29000, 1.76, 16),
+    ],
+  },
+  {
+    id: 'as3',
+    name: 'Lookalike 1% – past buyers',
+    audience: 'Similar to past Selverra buyers, Gujarat',
+    budget: '₹300/day',
+    adsLine: '1 of 2 ads running',
+    spend: 6300,
+    ctr: 1.65,
+    leads: 22,
+    visits: 4,
+    won: 2,
+    ads: [
+      ad('Payal reel – lookalike', 'Reel', 'Sannjh bridal silver', 'Sign up', 'Active', 4100, 25000, 1.8, 15),
+      ad('Bridal set static', 'Image', 'Bridal silver for your big day', 'Learn more', 'Paused', 2200, 15000, 1.4, 7),
+    ],
+  },
+]
+
+export const AD_FORMAT_COLOR: Record<Ad['format'], string> = {
+  Reel: '#7A3B4A',
+  Carousel: '#355E7A',
+  Image: '#5B6B2E',
+  Video: '#7A5A1F',
+}
+
+/** Per-rep month figures behind the manager dashboard's team table. */
+export const TEAM = [
+  { rep: 'Neha Shah', leads: 98, replyMins: 8, visits: 21, target: 25, won: 12, value: 612000, late: 0 },
+  { rep: 'Amit Patel', leads: 86, replyMins: 14, visits: 18, target: 25, won: 9, value: 468000, late: 1 },
+  { rep: 'Sneha Rao', leads: 79, replyMins: 23, visits: 13, target: 20, won: 6, value: 254000, late: 2 },
+  { rep: 'Ravi Mehta', leads: 79, replyMins: 41, visits: 9, target: 20, won: 4, value: 171000, late: 4 },
+]
+
+/** Neha's own pipeline, used by the salesperson dashboard. */
+export const MY_PIPELINE: [Stage, number][] = [
+  ['New lead', 1],
+  ['Messaged', 12],
+  ['Call 1', 15],
+  ['Call 2', 11],
+  ['Call 3', 7],
+  ['Call 4', 3],
+  ['Visit scheduled', 8],
+  ['Purchased', 10],
+  ['No reply', 10],
+  ['Not interested', 9],
+  ['Future contact', 12],
+]
+
+/** The lead the detail screen opens on, with its full history. */
+export const LEAD_DETAIL = {
+  id: 'l1',
+  name: 'Riya Patel',
+  phone: '+91 98250 •••14',
+  email: 'riya.patel@example.com',
+  city: 'Ahmedabad',
+  source: 'Instant Form · Instagram',
+  campaign: 'Sannjh Bridal – Lead Form',
+  adset: 'Brides-to-be 22–32 · Ahmedabad',
+  ad: 'Bridal payal reel – V1',
+  collection: 'Sannjh',
+  stage: 'Visit scheduled' as Stage,
+  status: 'Hot' as const,
+  rep: 'Neha Shah',
+  received: 'Today, 9:12 AM',
+  replyMins: 6,
+  budget: '₹60,000 – ₹90,000',
+  weddingDate: 'March 2027',
+  formAnswers: [
+    ['What are you looking for?', 'Full bridal set — payal, bichhiya, kamarbandh'],
+    ['When is the wedding?', 'March 2027'],
+    ['Budget range', '₹60,000 – ₹90,000'],
+    ['Preferred city', 'Ahmedabad'],
+  ],
+  timeline: [
+    { at: 'Today, 11:30 AM', who: 'Neha Shah', kind: 'Site visit' as const, text: 'Store visit confirmed for 11:30 AM. Antique-finish trays kept ready as Mansi asked.' },
+    { at: 'Today, 10:05 AM', who: 'Neha Shah', kind: 'Call' as const, text: 'Call 1 — spoke 4 min. Wants to see the full bridal set in person. Booked a store visit for today 11:30 AM.' },
+    { at: 'Today, 9:18 AM', who: 'Neha Shah', kind: 'Message' as const, text: 'Sent first WhatsApp: introduced Sannjh bridal collection, asked for a good time to call.' },
+    { at: 'Today, 9:12 AM', who: 'System', kind: 'Other' as const, text: 'Lead came in from Instant Form · Instagram and was assigned to Neha Shah.' },
+  ],
+}
+
+/** Meta sync state for the Sync Data screen. */
+export const SYNC = {
+  lastSync: 'Today, 10:30 AM',
+  nextSync: 'Today, 11:30 AM',
+  account: 'Selverra Jewellers · act_8842019',
+  pages: ['Selverra Jewellers', 'Sannjh by Selverra'],
+  forms: [
+    { name: 'Sannjh bridal enquiry', page: 'Sannjh by Selverra', leads: 138, mapped: true },
+    { name: 'Moksha temple décor enquiry', page: 'Selverra Jewellers', leads: 52, mapped: true },
+    { name: 'Regalia accessories enquiry', page: 'Selverra Jewellers', leads: 56, mapped: true },
+    { name: 'Uphaar gifting enquiry', page: 'Selverra Jewellers', leads: 82, mapped: false },
+  ],
+  history: [
+    { at: 'Today, 10:30 AM', pulled: 14, status: 'ok' as const, note: '14 new leads · 9 campaigns updated' },
+    { at: 'Today, 9:30 AM', pulled: 6, status: 'ok' as const, note: '6 new leads · 9 campaigns updated' },
+    { at: 'Today, 8:30 AM', pulled: 0, status: 'ok' as const, note: 'No new leads' },
+    { at: 'Today, 7:30 AM', pulled: 3, status: 'warn' as const, note: '3 new leads · 1 form not mapped to a collection' },
+    { at: 'Yesterday, 11:30 PM', pulled: 11, status: 'ok' as const, note: '11 new leads · 9 campaigns updated' },
+  ],
+}
+
+/** Teams, members and role permissions for Settings. */
+export const TEAMS = [
+  { name: 'Bridal · Sannjh', manager: 'Mansi Shah', members: ['Neha Shah', 'Ravi Mehta'], collections: ['Sannjh', 'Maheer'] },
+  { name: 'Gifting · Uphaar', manager: 'Mansi Shah', members: ['Sneha Rao'], collections: ['Uphaar', 'Dawaat'] },
+  { name: 'Furniture · Imperial', manager: 'Jay Thakkar', members: ['Amit Patel'], collections: ['Imperial', 'Varchas', 'Aangan'] },
+]
+
+export const MEMBERS = [
+  { name: 'Hardik Shah', role: 'Owner', team: 'All teams', email: 'hardik@selverra.example', active: true },
+  { name: 'Mansi Shah', role: 'Manager', team: 'Bridal · Sannjh, Gifting · Uphaar', email: 'mansi@selverra.example', active: true },
+  { name: 'Jay Thakkar', role: 'Manager', team: 'Furniture · Imperial', email: 'jay@selverra.example', active: true },
+  { name: 'Neha Shah', role: 'Salesperson', team: 'Bridal · Sannjh', email: 'neha@selverra.example', active: true },
+  { name: 'Amit Patel', role: 'Salesperson', team: 'Furniture · Imperial', email: 'amit@selverra.example', active: true },
+  { name: 'Sneha Rao', role: 'Salesperson', team: 'Gifting · Uphaar', email: 'sneha@selverra.example', active: true },
+  { name: 'Ravi Mehta', role: 'Salesperson', team: 'Bridal · Sannjh', email: 'ravi@selverra.example', active: false },
+]
+
+export const PERMISSIONS = [
+  { what: 'See every lead in the company', owner: true, manager: false, sales: false },
+  { what: "See their team's leads", owner: true, manager: true, sales: false },
+  { what: 'See only their own leads', owner: true, manager: true, sales: true },
+  { what: 'Assign a lead to a salesperson', owner: true, manager: true, sales: false },
+  { what: 'Change a lead stage', owner: true, manager: true, sales: true },
+  { what: 'See ad spend and cost per lead', owner: true, manager: true, sales: false },
+  { what: 'Add or remove team members', owner: true, manager: false, sales: false },
+  { what: 'Connect the Meta ad account', owner: true, manager: false, sales: false },
+  { what: 'Export leads to a file', owner: true, manager: true, sales: false },
 ]

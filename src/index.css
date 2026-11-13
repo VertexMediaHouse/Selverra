@@ -1,173 +1,39 @@
 @import "tailwindcss";
 @import "@fontsource-variable/inter";
 
-/* App toggles a `.dark` class (App.tsx, CommandPalette). Tailwind v4 defaults
-   `dark:` to prefers-color-scheme, so without this every dark: utility fired
-   from the OS setting alone — light cards got white text. Bind dark: to the
-   class the app actually controls. */
-@custom-variant dark (&:where(.dark, .dark *));
-
 @theme {
-  /* Layout tokens */
-  --radius-rail: 28px;
-  --radius-panel: 28px;
-  --radius-card: 16px;
-  --radius-input: 12px;
-  --radius-button: 10px;
-
-  /* Palette: Soft monochrome neumorphic glass */
-  --color-page-bg: #A8A8AD;
-  /* Panel is lightened from the original rgba(220,220,225,.7): at that value
-     the composite was #CCCCD1, too dark to carry three tiers of grey text
-     above 4.5:1 without collapsing them into one shade. */
-  --color-panel-bg: rgba(235, 235, 238, 0.8);
-  --color-card-bg: rgba(250, 250, 252, 0.8);
-  --color-rail-bg: #1C1C1E;
-  --color-accent-mint: #10B981;
-  --color-accent-mint-bg: rgba(16, 185, 129, 0.15);
-  /* Mint is a fill color: as text on the grey panel it only reaches 1.6:1.
-     Use this darker step for links, icons and deltas. */
-  --color-accent-mint-text: #0A6B4B;
-  --color-text-primary: #222224;
-  --color-text-muted: #4A4A51;
-  --color-border-subtle: rgba(0, 0, 0, 0.08);
-
-  /* Shadows */
-  --shadow-float: 0 16px 40px rgba(0, 0, 0, 0.12);
-  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-
-  /* Slate ramp, re-pointed for the metallic theme.
-     Pages use text-slate-400/500/600 for secondary text; the stock ramp is
-     too light to read on the grey panel, so the mid steps are darkened and
-     pushed neutral. Keeps ~160 existing utility classes working as-is. */
-  --color-slate-50: #F7F7F8;
-  --color-slate-100: #EDEDEF;
-  --color-slate-200: #DCDCDF;
-  --color-slate-300: #767680;
-  --color-slate-400: #5F5F66;
-  --color-slate-500: #4A4A51;
-  --color-slate-600: #3A3A40;
-  --color-slate-700: #333338;
-  --color-slate-800: #27272B;
-  --color-slate-900: #1A1A1D;
-  --color-slate-950: #0F0F11;
-
-  /* Indigo ramp re-pointed to the mint accent. Pages shipped with stock
-     indigo as the "primary" (links, primary buttons, Progress, suggestion
-     cards) which read cold-blue against the warm metallic/mint theme.
-     Re-pointing here recolors every indigo-* utility at once. */
-  --color-indigo-50: #E7F4EF;
-  --color-indigo-100: #CDE9E0;
-  --color-indigo-200: #A7D8C9;
-  --color-indigo-300: #6FBFA8;
-  --color-indigo-400: #2FA587;
-  --color-indigo-500: #10A37D;
-  --color-indigo-600: #0A6B4B;
-  --color-indigo-700: #085B40;
-  --color-indigo-800: #074A35;
-  --color-indigo-900: #053627;
+  --color-ground: #F6F4F2;
+  --color-surface: #FFFFFF;
+  --color-ink: #1C1A19;
+  --color-ink-soft: #4A4340;
+  --color-ink-mute: #6B625E;
+  --color-line: #E7E2DE;
+  --color-line-soft: #F0ECE9;
+  --color-rail: #262523;
+  --color-rail-text: #D9CFD1;
+  --color-rail-mute: #B9AEB0;
+  --color-plum: #5A2A35;
+  --color-plum-deep: #3D1C24;
+  --color-blush: #C9B8BC;
+  --color-chip: #EDE8E5;
+  --color-well: #EFEBE8;
+  --color-good: #14612E;
+  --color-bad: #B42318;
+  --color-teal: #0F8A80;
+  --font-sans: "Inter Variable", Inter, system-ui, sans-serif;
 }
 
+html, body, #root { min-height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* Default link colour for prose links only. Utility classes (text-white, text-rail-text…)
+   must win, so this is kept at a lower precedence than Tailwind's utilities. */
 @layer base {
-  body {
-    background-color: var(--color-page-bg);
-    color: var(--color-text-primary);
-    font-family: 'Inter Variable', sans-serif;
-  }
-
-  /* Dark theme. @theme tokens are static, but the CSS variables they emit are
-     plain custom properties and can be re-pointed at runtime under .dark.
-     Every .card/.panel/.rail/.btn/.th/.td and var(--color-*) usage flips from
-     this one block — no per-component dark: classes needed. */
-  .dark {
-    --color-page-bg: #0E0E10;
-    --color-panel-bg: rgba(28, 28, 32, 0.72);
-    --color-card-bg: rgba(38, 38, 43, 0.72);
-    --color-rail-bg: #0A0A0C;
-    --color-accent-mint: #2DD4A7;
-    --color-accent-mint-bg: rgba(45, 212, 167, 0.16);
-    --color-accent-mint-text: #4EE0B8;
-    --color-text-primary: #ECECEE;
-    --color-text-muted: #A9A9B2;
-    --color-border-subtle: rgba(255, 255, 255, 0.10);
-    --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-
-    /* SPLIT ramp, not a clean inversion. Two uses collide in this codebase:
-         - text-slate-300..600  → secondary TEXT, must read light on dark
-         - bg/border-slate-700..950 (mostly dark: variants) → SURFACES/borders,
-           must stay dark
-       So flip the text steps light and keep the surface steps at their stock
-       dark values. 50..200 stay light (fills like bg-slate-100 want dark here,
-       handled by their own dark: variants).
-       ponytail: per-utility semantics, not a math inversion — the one ramp has
-       to cover both roles; if a new component misuses a step, point it at a
-       --color-* token instead of adding a slate exception here. */
-    --color-slate-50: #0F0F11;
-    --color-slate-100: #1A1A1D;
-    --color-slate-200: #27272B;
-    --color-slate-300: #CBCBD3;
-    --color-slate-400: #9A9AA3;
-    --color-slate-500: #B4B4BD;
-    --color-slate-600: #CBCBD3;
-    --color-slate-700: #333338;
-    --color-slate-800: #27272B;
-    --color-slate-900: #1A1A1D;
-    --color-slate-950: #0F0F11;
-  }
+  a:not([class*="text-"]) { color: var(--color-plum); }
+  a:not([class*="text-"]):hover { color: var(--color-plum-deep); }
 }
-
-@layer components {
-  /* Display headings (PageHeader, KpiCard values) */
-  .display {
-    @apply font-semibold tracking-[-0.02em] text-[var(--color-text-primary)];
-  }
-
-  /* Containers */
-  .rail { @apply bg-[var(--color-rail-bg)] rounded-[var(--radius-rail)] shadow-2xl; }
-  .panel { @apply bg-[var(--color-panel-bg)] backdrop-blur-xl rounded-[var(--radius-panel)] border border-white/40 shadow-xl; }
-  .card {
-    @apply bg-[var(--color-card-bg)] backdrop-blur-md rounded-[var(--radius-card)] border border-white/30;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.06), var(--shadow-inset);
-  }
-  .dark .panel { @apply border-white/10; }
-  .dark .card { @apply border-white/[0.07]; box-shadow: 0 4px 16px rgba(0,0,0,0.3), var(--shadow-inset); }
-  /* Default btn is bg-white/60 (light glass); on dark use a translucent light fill. */
-  .dark .btn { @apply bg-white/[0.06] hover:bg-white/10; }
-  .dark .btn-primary { @apply bg-white text-black hover:bg-white hover:opacity-90; }
-  .dark .input { @apply bg-white/[0.05] focus:border-white/25; }
-
-  /* Inputs */
-  .input {
-    @apply bg-black/[0.04] rounded-[var(--radius-input)] border border-[var(--color-border-subtle)] px-4 py-2 outline-none focus:border-black/20;
-  }
-
-  /* Buttons */
-  .btn {
-    @apply inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-[var(--radius-button)]
-           border border-[var(--color-border-subtle)] bg-white/60 px-4 py-2 text-sm font-medium
-           text-[var(--color-text-primary)] transition-all hover:bg-white
-           disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/60;
-  }
-  .btn-primary { @apply border-transparent bg-[var(--color-text-primary)] text-white hover:bg-[var(--color-text-primary)] hover:opacity-90; }
-  .btn-ghost { @apply border-transparent bg-transparent hover:bg-black/5; }
-
-  /* Table cells. Referenced by DataTable and Insights but previously undefined,
-     which left headers and cells with browser defaults (centered bold th,
-     no padding, no color) on top of the glass panel. */
-  .th {
-    @apply px-3 py-2.5 text-left text-[11px] font-semibold tracking-[0.06em] whitespace-nowrap
-           text-[var(--color-text-muted)] uppercase;
-  }
-  .th:first-child { @apply pl-5; }
-  .th:last-child { @apply pr-5; }
-  .td {
-    @apply px-3 py-3 text-sm whitespace-nowrap text-[var(--color-text-primary)] align-middle;
-  }
-  .td:first-child { @apply pl-5; }
-  .td:last-child { @apply pr-5; }
-
-  .btn-sm { @apply px-2.5 py-1.5 text-xs; }
-}
-
-* { scrollbar-width: none; -ms-overflow-style: none; }
-*::-webkit-scrollbar { display: none; }
