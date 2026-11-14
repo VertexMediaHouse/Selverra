@@ -1,12 +1,11 @@
 import { useState } from 'react'
 import { RoleSwitch } from '../components/Shell'
 import type { Route } from '../components/Shell'
-import { Bar, Card, CardHead, PageHead, Pill, Stat } from '../components/ui'
+import { Bar, Card, CardHead, PageHead, PeriodChips, Pill, Stat } from '../components/ui'
+import type { Period } from '../components/ui'
 import { PERIOD_SUMMARY, SOURCE_COUNTS, TODAY, VISITS } from '../data/mock'
 import { SOURCES, type Role } from '../data/types'
 import { barWidth } from '../lib/format'
-
-type Period = 'today' | 'week' | 'month'
 
 export default function Dashboard({
   role,
@@ -39,32 +38,7 @@ export default function Dashboard({
     <>
       <PageHead title="Dashboard" sub={`${TODAY} · sample data`}>
         <RoleSwitch role={role} setRole={setRole} />
-        <div role="group" aria-label="Time period" className="flex gap-1 rounded-xl bg-chip p-1">
-          {(
-            [
-              ['today', 'Today'],
-              ['week', 'This week'],
-              ['month', 'This month'],
-            ] as [Period, string][]
-          ).map(([id, label]) => {
-            const on = id === period
-            return (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setPeriod(id)}
-                className={`min-h-10 cursor-pointer rounded-[9px] border-0 px-4 text-[13px] ${
-                  on
-                    ? 'bg-surface font-semibold text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
-                    : 'bg-transparent font-medium text-ink-soft'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
+        <PeriodChips value={period} onChange={setPeriod} />
       </PageHead>
 
       <section

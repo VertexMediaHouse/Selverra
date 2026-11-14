@@ -1,12 +1,19 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { Route } from '../components/Shell'
-import { Avatar, Card, CardHead, PageHead, Segmented, Select } from '../components/ui'
-import { TASKS } from '../data/mock'
-import { REPS, TASK_CHIP, type Task } from '../data/types'
+import { Card, PageHead, Segmented, Select } from '../components/ui'
+import { LEADS, TASKS } from '../data/mock'
+import {
+  COLLECTIONS,
+  REPS,
+  SOURCES,
+  STAGES,
+  TASK_CHIP,
+  type Task,
+  type TaskType,
+} from '../data/types'
 
-/** "Today" in the sample data: Fri 13 Nov 2026. Every scheduled task sits in
- *  the week that starts here, so this is where the calendar opens. */
+/** "Today" in the sample data: Fri 13 Nov 2026. The calendar opens on this month. */
 const TODAY = new Date(2026, 10, 13)
 
 /** Local YYYY-MM-DD. Not toISOString(), which shifts to UTC and moves the
@@ -42,42 +49,146 @@ function minutesOf(t: Task) {
   return (h + (/pm/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2])
 }
 
+/** Compact "11 AM" / "12:30 PM" — the month cells and the agenda rail drop ":00". */
+const shortTime = (t: Task) => timeOf(t).replace(':00', '')
+
+const CAMPAIGN_NAMES = [
+  'Sannjh Bridal – Lead Form',
+  'Uphaar Gifting – Messenger',
+  'Regalia – Instagram DM',
+  'Moksha Temple Decor – Lead Form',
+  'New Traffic Campaign',
+  'No campaign',
+]
+
+const AD_SETS = [
+  'Brides-to-be 22–32 · Ahmedabad',
+  'Lookalike 1% – past buyers',
+  'Festive gifting · Gujarat',
+]
+
+/** The coloured legend above the grid. Each entry switches one band of the
+ *  calendar on or off; "New leads count" is the grey per-day total, not a task
+ *  type, so it carries no `type`. */
+const LAYERS: { id: string; label: string; dot: string; type?: TaskType }[] = [
+  { id: 'visits', label: 'Site visits', dot: '#7E3AF2', type: 'Site visit' },
+  { id: 'calls', label: 'Calls', dot: '#0B7FB5', type: 'Call' },
+  { id: 'messages', label: 'Messages', dot: '#0F8A80', type: 'Message' },
+  { id: 'tasks', label: 'Follow-ups & tasks', dot: '#C08A1E', type: 'Other' },
+  { id: 'future', label: 'Future contact', dot: '#9D174D', type: 'Future contact' },
+  { id: 'leads', label: 'New leads count', dot: '#5B6676' },
+]
+
+/** Per-day new-lead counts for November 2026, as the month grid shows them.
+ *  Keyed by day of month; days left out had none. */
+const NEW_LEADS: Record<number, number> = {
+  1: 20, 2: 26, 3: 31, 4: 27, 5: 30, 6: 34, 7: 26, 8: 19,
+  9: 27, 10: 25, 11: 23, 12: 34, 13: 18, 14: 29, 15: 22,
+}
+
+const MONTH_FMT = new Intl.DateTimeFormat('en-GB', { month: 'long', year: 'numeric' })
+const DAY_FULL_FMT = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
 const WEEK_FMT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long' })
 const DAY_FMT = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric' })
+const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+/** Campaign, source and collection for a lead name, so the agenda rows and the
+ *  filter row agree on which slice a task belongs to. */
+const LEAD_BY_NAME = new Map(LEADS.map((l) => [l.name, l]))
 
 export default function Calendar({ go }: { go: (r: Route) => void }) {
-  const [view, setView] = useState<'week' | 'list'>('week')
-  const [rep, setRep] = useState('All')
-  const [type, setType] = useState('All')
-  const [start, setStart] = useState(() => weekStart(TODAY))
+  const [view, setView] = useState<'month' | 'week' | 'day'>('month')
+  const [cursor, setCursor] = useState(TODAY)
+  const [selected, setSelected] = useState(iso(TODAY))
+  const [off, setOff] = useState<Record<string, boolean>>({})
+  const [f, setF] = useState({
+    campaign: 'All',
+    adset: 'All',
+    source: 'All',
+    stage: 'All',
+    status: 'All',
+    rep: 'All',
+    collection: 'All',
+  })
   /** Tasks dragged to another day: task id to YYYY-MM-DD. */
   const [moved, setMoved] = useState<Record<string, string>>({})
   const [over, setOver] = useState<string | null>(null)
-  const [done, setDone] = useState<Record<string, boolean>>({})
 
-  const days = useMemo(
-    () => Array.from({ length: 7 }, (_, i) => addDays(start, i)),
-    [start],
-  )
-
-  const items = TASKS.filter(
-    (t) =>
-      t.due !== 'overdue' &&
-      (rep === 'All' || t.rep === rep) &&
-      (type === 'All' || t.type === type),
-  )
-
+  const set = (k: keyof typeof f) => (v: string) => setF((p) => ({ ...p, [k]: v }))
   const dayKey = (t: Task) => moved[t.id] ?? dateOf(t)
-  const isDone = (t: Task) => done[t.id] ?? t.done
+  const showLeads = !off.leads
 
-  /** Only the tasks inside the week on show — the list view and the counts in
-   *  the heading both follow the arrows. */
-  const weekItems = useMemo(() => {
-    const keys = new Set(days.map(iso))
-    return items.filter((t) => keys.has(dayKey(t))).sort((a, b) => minutesOf(a) - minutesOf(b))
-  }, [items, days, moved])
+  /** Every task that passes the legend and the filter row. The lead-side
+   *  filters only narrow tasks whose lead is in the sample book; a task for a
+   *  lead we do not hold stays visible rather than vanishing silently. */
+  const items = useMemo(() => {
+    const hidden = new Set(
+      LAYERS.filter((l) => l.type && off[l.id]).map((l) => l.type as TaskType),
+    )
+    return TASKS.filter((t) => {
+      // Overdue work has no date of its own — it belongs on the Tasks page, not
+      // stacked onto today's agenda.
+      if (t.due === 'overdue') return false
+      if (hidden.has(t.type)) return false
+      if (f.rep !== 'All' && t.rep !== f.rep) return false
+      const l = LEAD_BY_NAME.get(t.lead)
+      if (!l) return true
+      return (
+        (f.campaign === 'All' || l.campaign === f.campaign) &&
+        (f.adset === 'All' || l.adset === f.adset) &&
+        (f.source === 'All' || l.source === f.source) &&
+        (f.stage === 'All' || l.stage === f.stage) &&
+        (f.status === 'All' || l.status === f.status) &&
+        (f.collection === 'All' || l.collection === f.collection)
+      )
+    })
+  }, [f, off])
 
-  const visits = weekItems.filter((t) => t.type === 'Site visit').length
+  /** Day key to that day's tasks, clock-ordered. */
+  const byDay = useMemo(() => {
+    const m = new Map<string, Task[]>()
+    for (const t of items) {
+      const k = moved[t.id] ?? dateOf(t)
+      const list = m.get(k)
+      if (list) list.push(t)
+      else m.set(k, [t])
+    }
+    for (const list of m.values()) list.sort((a, b) => minutesOf(a) - minutesOf(b))
+    return m
+  }, [items, moved])
+
+  /** The six Monday-start weeks that cover the month on show, so the grid keeps
+   *  one shape and the edge days of the neighbouring months fill in. */
+  const grid = useMemo(() => {
+    const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+    const start = weekStart(first)
+    return Array.from({ length: 42 }, (_, i) => addDays(start, i))
+  }, [cursor])
+
+  const weekDays = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart(cursor), i)),
+    [cursor],
+  )
+
+  const visibleDays = view === 'month' ? grid : view === 'week' ? weekDays : [cursor]
+
+  /** Counts in the footer follow whatever range is on show. */
+  const rangeItems = useMemo(() => {
+    const keys = new Set(visibleDays.map(iso))
+    return items.filter((t) => keys.has(dayKey(t)))
+  }, [items, visibleDays, moved])
+
+  const agenda = byDay.get(selected) ?? []
+  const selDate = new Date(`${selected}T00:00:00`)
+  const isToday = selected === iso(TODAY)
+  const selLeads = showLeads && selDate.getMonth() === 10 ? NEW_LEADS[selDate.getDate()] : undefined
+
+  const step = (n: number) =>
+    setCursor((d) =>
+      view === 'month'
+        ? new Date(d.getFullYear(), d.getMonth() + n, 1)
+        : addDays(d, n * (view === 'week' ? 7 : 1)),
+    )
 
   const drop = (key: string) => (e: React.DragEvent) => {
     e.preventDefault()
@@ -86,37 +197,50 @@ export default function Calendar({ go }: { go: (r: Route) => void }) {
     if (id) setMoved((p) => ({ ...p, [id]: key }))
   }
 
-  const label = `${WEEK_FMT.format(days[0])} – ${WEEK_FMT.format(days[6])} ${days[6].getFullYear()}`
+  const rangeLabel =
+    view === 'month'
+      ? MONTH_FMT.format(cursor)
+      : view === 'week'
+        ? `${WEEK_FMT.format(weekDays[0])} – ${WEEK_FMT.format(weekDays[6])} ${weekDays[6].getFullYear()}`
+        : DAY_FULL_FMT.format(cursor)
+
+  const visits = rangeItems.filter((t) => t.type === 'Site visit').length
 
   return (
     <>
       <PageHead
         title="Calendar"
-        sub={`Week of ${label} · ${weekItems.length} booked · ${visits} store visits · sample data`}
+        sub="Visits, calls, messages, tasks and future-contact dates land here on their own"
       >
-        <div role="group" aria-label="Change week" className="flex items-center gap-1">
+        <div role="group" aria-label="Change range" className="flex items-center gap-1">
           <button
             type="button"
-            aria-label="Previous week"
-            onClick={() => setStart((d) => addDays(d, -7))}
+            aria-label="Previous"
+            onClick={() => step(-1)}
             className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[10px] border border-line bg-surface text-ink-soft"
           >
             <ChevronLeft size={16} />
           </button>
+          <span className="min-w-[150px] px-1 text-center text-[15px] font-bold text-ink">
+            {rangeLabel}
+          </span>
           <button
             type="button"
-            onClick={() => setStart(weekStart(TODAY))}
-            className="min-h-10 cursor-pointer rounded-[10px] border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink"
-          >
-            Today
-          </button>
-          <button
-            type="button"
-            aria-label="Next week"
-            onClick={() => setStart((d) => addDays(d, 7))}
+            aria-label="Next"
+            onClick={() => step(1)}
             className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-[10px] border border-line bg-surface text-ink-soft"
           >
             <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCursor(TODAY)
+              setSelected(iso(TODAY))
+            }}
+            className="ml-1.5 min-h-10 cursor-pointer rounded-[10px] border border-line bg-surface px-3.5 text-[13px] font-semibold text-ink"
+          >
+            Today
           </button>
         </div>
         <Segmented
@@ -124,160 +248,204 @@ export default function Calendar({ go }: { go: (r: Route) => void }) {
           value={view}
           onChange={setView}
           options={[
+            { id: 'month', label: 'Month' },
             { id: 'week', label: 'Week' },
-            { id: 'list', label: 'List' },
+            { id: 'day', label: 'Day' },
           ]}
         />
       </PageHead>
 
-      <Card className="flex flex-wrap items-end gap-3">
-        <Select label="Salesperson" value={rep} options={['All', ...Object.keys(REPS)]} onChange={setRep} />
-        <Select
-          label="Type"
-          value={type}
-          options={['All', 'Call', 'Message', 'Site visit', 'Future contact', 'Other']}
-          onChange={setType}
-        />
+      <Card className="flex flex-col gap-3.5">
+        <div role="group" aria-label="Show on calendar" className="flex flex-wrap gap-2">
+          {LAYERS.map((l) => {
+            const on = !off[l.id]
+            return (
+              <button
+                key={l.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setOff((p) => ({ ...p, [l.id]: on }))}
+                className={`flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-xs font-semibold ${
+                  on ? 'border-plum bg-surface text-ink' : 'border-line bg-well/60 text-ink-mute'
+                }`}
+              >
+                <span
+                  aria-hidden
+                  className="h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: on ? l.dot : '#C9C2BD' }}
+                />
+                {l.label}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <Select label="Campaign" value={f.campaign} options={['All', ...CAMPAIGN_NAMES]} onChange={set('campaign')} />
+          <Select label="Ad set" value={f.adset} options={['All', ...AD_SETS]} onChange={set('adset')} />
+          <Select label="Source" value={f.source} options={['All', ...SOURCES]} onChange={set('source')} />
+          <Select label="Stage" value={f.stage} options={['All', ...STAGES]} onChange={set('stage')} />
+          <Select label="Status" value={f.status} options={['All', 'Hot', 'Warm', 'Cold']} onChange={set('status')} />
+          <Select label="Salesperson" value={f.rep} options={['All', ...Object.keys(REPS)]} onChange={set('rep')} />
+          <Select label="Collection" value={f.collection} options={['All', ...COLLECTIONS]} onChange={set('collection')} />
+        </div>
       </Card>
 
-      {view === 'week' ? (
-        <div className="overflow-x-auto pb-2">
-          <div className="grid min-w-[1000px] gap-3 [grid-template-columns:repeat(7,minmax(0,1fr))]">
-            {days.map((d) => {
-              const key = iso(d)
-              const today = key === iso(TODAY)
-              const dayItems = weekItems.filter((t) => dayKey(t) === key)
-              const dayVisits = dayItems.filter((t) => t.type === 'Site visit').length
-              const left = dayItems.filter((t) => !isDone(t)).length
-              return (
-                <section
-                  key={key}
-                  aria-label={DAY_FMT.format(d)}
-                  onDragOver={(e) => {
-                    e.preventDefault()
-                    e.dataTransfer.dropEffect = 'move'
-                    if (over !== key) setOver(key)
-                  }}
-                  onDragLeave={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(null)
-                  }}
-                  onDrop={drop(key)}
-                  className={`flex flex-col gap-2 rounded-[14px] border p-3 ${
-                    today ? 'border-plum bg-surface' : 'border-line bg-well/50'
-                  } ${over === key ? 'outline-2 outline-dashed outline-plum' : ''}`}
-                >
-                  <div className="flex items-center justify-between gap-2 pb-1">
-                    <h2 className={`m-0 text-[13px] font-semibold ${today ? 'text-plum' : ''}`}>
-                      {DAY_FMT.format(d)}
-                    </h2>
-                    {today ? (
-                      <span className="rounded-full bg-plum px-2 py-0.5 text-[10px] font-bold text-white">
-                        Today
+      <div className="grid items-start gap-4 [grid-template-columns:minmax(0,1fr)] xl:[grid-template-columns:minmax(0,1fr)_360px]">
+        <Card className="overflow-x-auto">
+          <div className="min-w-[640px]">
+            {view === 'day' ? null : (
+              <div className="grid [grid-template-columns:repeat(7,minmax(0,1fr))]">
+                {DOW.map((d) => (
+                  <span key={d} className="px-2 pb-2 text-[11px] font-semibold text-ink-mute">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            <div
+              className={`grid gap-px bg-line-soft ${
+                view === 'day'
+                  ? '[grid-template-columns:minmax(0,1fr)]'
+                  : '[grid-template-columns:repeat(7,minmax(0,1fr))]'
+              } ${view === 'month' ? '[grid-auto-rows:minmax(96px,auto)]' : ''}`}
+            >
+              {visibleDays.map((d) => {
+                const key = iso(d)
+                const dayItems = byDay.get(key) ?? []
+                const shown = view === 'month' ? dayItems.slice(0, 4) : dayItems
+                const extra = dayItems.length - shown.length
+                const today = key === iso(TODAY)
+                const inMonth = view === 'month' ? d.getMonth() === cursor.getMonth() : true
+                const leads = inMonth && d.getMonth() === 10 ? NEW_LEADS[d.getDate()] : undefined
+                const weekend = d.getDay() === 0 || d.getDay() === 6
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-label={DAY_FMT.format(d)}
+                    aria-pressed={key === selected}
+                    onClick={() => setSelected(key)}
+                    onDragOver={(e) => {
+                      e.preventDefault()
+                      e.dataTransfer.dropEffect = 'move'
+                      if (over !== key) setOver(key)
+                    }}
+                    onDragLeave={(e) => {
+                      if (!e.currentTarget.contains(e.relatedTarget as Node)) setOver(null)
+                    }}
+                    onDrop={drop(key)}
+                    className={`flex cursor-pointer flex-col items-stretch gap-1 border-0 p-1.5 text-left ${
+                      view === 'month' ? 'min-h-[96px]' : 'min-h-[220px]'
+                    } ${inMonth ? 'bg-surface' : 'bg-well/60'} ${
+                      key === selected ? 'outline-2 -outline-offset-2 outline-plum' : ''
+                    } ${over === key ? 'outline-2 outline-dashed outline-plum' : ''}`}
+                  >
+                    <span className="flex items-center justify-between gap-1">
+                      <span
+                        className={`flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[11px] ${
+                          today
+                            ? 'bg-plum font-bold text-white'
+                            : !inMonth
+                              ? 'font-semibold text-ink-mute'
+                              : weekend
+                                ? 'font-bold text-[#9A2A1C]'
+                                : 'font-bold text-ink'
+                        }`}
+                      >
+                        {d.getDate()}
+                      </span>
+                      {showLeads && leads ? (
+                        <span className="text-[10px] font-semibold text-ink-mute">{leads} new</span>
+                      ) : null}
+                    </span>
+
+                    {shown.map((t) => (
+                      <span
+                        key={t.id}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('text/plain', t.id)
+                          e.dataTransfer.effectAllowed = 'move'
+                        }}
+                        onDragEnd={() => setOver(null)}
+                        className={`block cursor-grab truncate rounded px-1 py-0.5 text-[10px] font-semibold active:cursor-grabbing ${TASK_CHIP[t.type]}`}
+                      >
+                        {shortTime(t)} {t.lead}
+                      </span>
+                    ))}
+
+                    {extra > 0 ? (
+                      <span className="px-1 text-[10px] font-semibold text-ink-mute">
+                        +{extra} more
                       </span>
                     ) : null}
-                  </div>
-
-                  {dayItems.length > 0 ? (
-                    <p className="m-0 flex flex-wrap gap-x-2 text-[11px] text-ink-mute">
-                      <span>{left} to do</span>
-                      {dayVisits > 0 ? <span>· {dayVisits} visit{dayVisits > 1 ? 's' : ''}</span> : null}
-                    </p>
-                  ) : null}
-
-                  {dayItems.length === 0 ? (
-                    <p className="m-0 py-2 text-xs text-ink-mute">Nothing booked</p>
-                  ) : (
-                    dayItems.map((t) => {
-                      const [initials, bg] = REPS[t.rep] ?? REPS.Unassigned
-                      const complete = isDone(t)
-                      return (
-                        <article
-                          key={t.id}
-                          draggable
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/plain', t.id)
-                            e.dataTransfer.effectAllowed = 'move'
-                          }}
-                          onDragEnd={() => setOver(null)}
-                          className={`flex cursor-grab flex-col gap-1 rounded-[10px] border border-[#E2DCD8] bg-surface p-2.5 active:cursor-grabbing ${
-                            complete ? 'opacity-60' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[11px] font-semibold text-ink">{timeOf(t)}</span>
-                            <label className="ml-auto flex cursor-pointer items-center gap-1">
-                              <input
-                                type="checkbox"
-                                checked={complete}
-                                draggable={false}
-                                onChange={(e) =>
-                                  setDone((p) => ({ ...p, [t.id]: e.target.checked }))
-                                }
-                                className="h-3.5 w-3.5 cursor-pointer accent-plum"
-                              />
-                              <span className="sr-only">Mark {t.title} done</span>
-                            </label>
-                          </div>
-                          <span
-                            className={`w-fit whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${TASK_CHIP[t.type]}`}
-                          >
-                            {t.type}
-                          </span>
-                          <button
-                            type="button"
-                            draggable={false}
-                            onClick={() => go('lead')}
-                            className={`w-fit cursor-pointer border-0 bg-transparent p-0 text-left text-xs font-semibold text-ink ${
-                              complete ? 'line-through' : ''
-                            }`}
-                          >
-                            {t.lead}
-                          </button>
-                          <span className="text-[11px] text-ink-mute">{t.context}</span>
-                          <div className="flex items-center gap-1.5 border-t border-line-soft pt-1.5">
-                            <Avatar initials={initials} bg={bg} />
-                            <span className="text-[11px] text-ink-soft">{t.rep}</span>
-                          </div>
-                        </article>
-                      )
-                    })
-                  )}
-                </section>
-              )
-            })}
-          </div>
-        </div>
-      ) : (
-        <Card className="flex flex-col">
-          <CardHead title="Everything booked this week" aside={`${weekItems.length} entries`} />
-          {weekItems.map((t) => (
-            <div key={t.id} className="flex flex-wrap items-center gap-x-3.5 gap-y-2 border-t border-line-soft py-3">
-              <span className="w-[140px] text-[13px] font-semibold">{t.time}</span>
-              <span
-                className={`whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-semibold ${TASK_CHIP[t.type]}`}
-              >
-                {t.type}
-              </span>
-              <div className="flex min-w-0 flex-[1_1_240px] flex-col gap-[3px]">
-                <a
-                  href="#/lead"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    go('lead')
-                  }}
-                  className="text-sm font-semibold text-ink no-underline"
-                >
-                  {t.lead}
-                </a>
-                <span className="text-xs text-ink-mute">
-                  {t.title} · {t.context}
-                </span>
-              </div>
-              <span className="ml-auto text-xs text-ink-mute">{t.rep}</span>
+                  </button>
+                )
+              })}
             </div>
-          ))}
+          </div>
         </Card>
-      )}
+
+        <Card className="flex flex-col">
+          <header className="pb-2">
+            <h2 className="m-0 text-[15px] font-bold">
+              {DAY_FULL_FMT.format(selDate)}
+              {isToday ? ' · today' : ''}
+            </h2>
+            <p className="mt-1 mb-0 text-xs text-ink-mute">
+              {agenda.filter((t) => t.type === 'Site visit').length} visits ·{' '}
+              {agenda.filter((t) => t.type === 'Call').length} calls ·{' '}
+              {agenda.filter((t) => t.type !== 'Site visit' && t.type !== 'Call').length} tasks
+              {selLeads ? ` · ${selLeads} new leads came in` : ''}
+            </p>
+          </header>
+
+          {agenda.length === 0 ? (
+            <p className="m-0 border-t border-line-soft py-4 text-xs text-ink-mute">
+              Nothing booked on this day
+            </p>
+          ) : (
+            agenda.map((t) => (
+              <article key={t.id} className="flex items-start border-t border-line-soft py-2.5">
+                <span className="w-[66px] shrink-0 pt-0.5 pr-3 text-[11px] font-semibold text-ink-soft">
+                  {shortTime(t)}
+                </span>
+                <div className="flex min-w-0 flex-col gap-1 border-l border-line-soft pl-3">
+                  <span
+                    className={`w-fit whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${TASK_CHIP[t.type]}`}
+                  >
+                    {t.type}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => go('lead')}
+                    className="w-fit cursor-pointer border-0 bg-transparent p-0 text-left text-[13px] font-semibold text-ink"
+                  >
+                    {t.title}
+                  </button>
+                  <span className="text-[11px] text-ink-mute">
+                    <span className="text-plum underline">{t.lead}</span> · {t.context} · {t.rep}
+                  </span>
+                </div>
+              </article>
+            ))
+          )}
+
+          <button
+            type="button"
+            onClick={() => go('tasks')}
+            className="mt-1 cursor-pointer border-0 border-t border-line-soft bg-transparent py-3 text-center text-xs font-semibold text-plum"
+          >
+            + Add task or visit on this day
+          </button>
+        </Card>
+      </div>
+
+      <p className="m-0 text-xs text-ink-mute">
+        {rangeItems.length} booked · {visits} store visits · sample data
+      </p>
     </>
   )
 }

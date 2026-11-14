@@ -230,6 +230,20 @@ export const TEAM = [
   { rep: 'Ravi Mehta', leads: 79, replyMins: 41, visits: 9, target: 20, won: 4, value: 171000, late: 4 },
 ]
 
+/** Share of the month's numbers that falls in each period. Mock data has only
+ *  month totals, so today/week are scaled from them. */
+export const PERIOD_SHARE: Record<'today' | 'week' | 'month', number> = {
+  today: 0.05,
+  week: 0.28,
+  month: 1,
+}
+
+export const PERIOD_LABEL: Record<'today' | 'week' | 'month', string> = {
+  today: 'today',
+  week: 'this week',
+  month: 'this month',
+}
+
 /** Neha's own pipeline, used by the salesperson dashboard. */
 export const MY_PIPELINE: [Stage, number][] = [
   ['New lead', 1],

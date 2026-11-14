@@ -98,19 +98,27 @@ export function Select({
   value,
   options,
   onChange,
+  wide = false,
 }: {
   label: string
   value: string
   options: string[]
   onChange: (v: string) => void
+  /** Fill the parent instead of the fixed 172px filter-row width. For selects
+   *  laid out in a grid, where a clipped value would hide the choice. */
+  wide?: boolean
 }) {
   return (
-    <label className="flex flex-col gap-1 text-xs font-medium text-ink-mute">
+    <label
+      className={`flex flex-col gap-1 text-xs font-medium text-ink-mute ${
+        wide ? 'w-full min-w-0' : 'w-[172px] shrink-0'
+      }`}
+    >
       {label}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="min-h-10 min-w-[140px] rounded-[10px] border border-[#DCD5D1] bg-surface px-2.5 text-[13px] text-ink"
+        className="min-h-10 w-full rounded-[10px] border border-[#DCD5D1] bg-surface px-2.5 text-[13px] text-ink"
       >
         {options.map((o) => (
           <option key={o}>{o}</option>
@@ -175,5 +183,45 @@ export function PageHead({
       </div>
       {children ? <div className="flex flex-wrap items-center gap-2.5">{children}</div> : null}
     </header>
+  )
+}
+
+export type Period = 'today' | 'week' | 'month'
+
+/** Today / This week / This month chip group, shared by all three dashboards. */
+export function PeriodChips({
+  value,
+  onChange,
+}: {
+  value: Period
+  onChange: (p: Period) => void
+}) {
+  return (
+    <div role="group" aria-label="Time period" className="flex gap-1 rounded-xl bg-chip p-1">
+      {(
+        [
+          ['today', 'Today'],
+          ['week', 'This week'],
+          ['month', 'This month'],
+        ] as [Period, string][]
+      ).map(([id, label]) => {
+        const on = id === value
+        return (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => onChange(id)}
+            className={`min-h-10 cursor-pointer rounded-[9px] border-0 px-4 text-[13px] ${
+              on
+                ? 'bg-surface font-semibold text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]'
+                : 'bg-transparent font-medium text-ink-soft'
+            }`}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
   )
 }

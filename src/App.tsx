@@ -75,7 +75,7 @@ export default function App() {
       case 'sync':
         return <SyncData />
       case 'settings':
-        return <Settings />
+        return <Settings go={go} />
       default:
         if (role === 'sales') return <SalesDashboard role={role} setRole={setRole} go={go} />
         if (role === 'manager') return <ManagerDashboard role={role} setRole={setRole} go={go} />

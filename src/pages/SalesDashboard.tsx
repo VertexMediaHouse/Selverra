@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { RoleSwitch } from '../components/Shell'
 import type { Route } from '../components/Shell'
-import { Bar, Card, CardHead, PageHead, Stat, Toast } from '../components/ui'
-import { MY_PIPELINE, TASKS } from '../data/mock'
+import { Bar, Card, CardHead, PageHead, PeriodChips, Stat, Toast } from '../components/ui'
+import type { Period } from '../components/ui'
+import { MY_PIPELINE, PERIOD_LABEL, PERIOD_SHARE, TASKS } from '../data/mock'
 import { STAGE_COLOR, TASK_CHIP, type Role } from '../data/types'
 import { barWidth } from '../lib/format'
 
@@ -17,6 +18,7 @@ export default function SalesDashboard({
   setRole: (r: Role) => void
   go: (r: Route) => void
 }) {
+  const [period, setPeriod] = useState<Period>('month')
   const [contacted, setContacted] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [done, setDone] = useState<Record<string, boolean>>({ t5: true, t6: true })
@@ -30,9 +32,19 @@ export default function SalesDashboard({
   }))
 
   const doneCount = plan.filter((p) => p.done).length
+  const share = PERIOD_SHARE[period]
+  // Mock data only has month totals, so shorter periods are scaled from them.
+  const scale = (n: number) => Math.round(n * share)
+  const my = {
+    visits: scale(21),
+    target: scale(25),
+    replyMins: period === 'month' ? 8 : period === 'week' ? 9 : 7,
+  }
   const pipeline = MY_PIPELINE.map(([stage, count]) => ({
     stage,
-    count: stage === 'New lead' && contacted ? 0 : stage === 'Messaged' && contacted ? 13 : count,
+    count: scale(
+      stage === 'New lead' && contacted ? 0 : stage === 'Messaged' && contacted ? 13 : count,
+    ),
   }))
   const pipeMax = Math.max(...pipeline.map((p) => p.count)) || 1
 
@@ -42,6 +54,7 @@ export default function SalesDashboard({
     <>
       <PageHead title="Good afternoon, Neha" sub="Here's your day · Friday, 13 November · sample data">
         <RoleSwitch role={role} setRole={setRole} />
+        <PeriodChips value={period} onChange={setPeriod} />
       </PageHead>
 
       {!contacted ? (
@@ -105,17 +118,22 @@ export default function SalesDashboard({
           noteTone="soft"
         />
         <Card className="flex flex-col gap-2">
-          <span className="text-[13px] font-medium text-ink-mute">Visits this month</span>
-          <span className="text-[34px] font-bold tracking-[-0.02em]">
-            21 <span className="text-base font-medium text-ink-mute">of 25 target</span>
+          <span className="text-[13px] font-medium text-ink-mute">
+            Visits {PERIOD_LABEL[period]}
           </span>
-          <Bar width="84%" color="var(--color-teal)" />
-          <span className="text-[13px] text-ink-soft">4 more to reach your target</span>
+          <span className="text-[34px] font-bold tracking-[-0.02em]">
+            {my.visits}{' '}
+            <span className="text-base font-medium text-ink-mute">of {my.target} target</span>
+          </span>
+          <Bar width={barWidth(my.visits, my.target)} color="var(--color-teal)" />
+          <span className="text-[13px] text-ink-soft">
+            {Math.max(my.target - my.visits, 0)} more to reach your target
+          </span>
         </Card>
         <Stat
           label="Your first reply time"
-          value="8 min"
-          note="Fastest in the team this month"
+          value={`${my.replyMins} min`}
+          note={`Fastest in the team ${PERIOD_LABEL[period]}`}
           noteTone="good"
         />
       </section>

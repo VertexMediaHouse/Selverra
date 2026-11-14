@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { RoleSwitch } from '../components/Shell'
 import type { Route } from '../components/Shell'
-import { Avatar, Bar, Card, CardHead, PageHead, Pill, Stat } from '../components/ui'
-import { TASKS, TEAM, VISITS } from '../data/mock'
+import { Avatar, Bar, Card, CardHead, PageHead, PeriodChips, Pill, Stat } from '../components/ui'
+import type { Period } from '../components/ui'
+import { PERIOD_LABEL, PERIOD_SHARE, TASKS, TEAM, VISITS } from '../data/mock'
 import { REPS, type Role } from '../data/types'
 import { barWidth, inr } from '../lib/format'
 
@@ -14,12 +16,25 @@ export default function ManagerDashboard({
   setRole: (r: Role) => void
   go: (r: Route) => void
 }) {
-  const totalLeads = TEAM.reduce((a, t) => a + t.leads, 0)
-  const totalVisits = TEAM.reduce((a, t) => a + t.visits, 0)
-  const totalWon = TEAM.reduce((a, t) => a + t.won, 0)
-  const totalValue = TEAM.reduce((a, t) => a + t.value, 0)
-  const totalLate = TEAM.reduce((a, t) => a + t.late, 0)
-  const maxLeads = Math.max(...TEAM.map((t) => t.leads))
+  const [period, setPeriod] = useState<Period>('month')
+  const share = PERIOD_SHARE[period]
+  // Mock data only has month totals, so shorter periods are scaled from them.
+  const scale = (n: number) => Math.round(n * share)
+  const team = TEAM.map((t) => ({
+    ...t,
+    leads: scale(t.leads),
+    visits: scale(t.visits),
+    target: scale(t.target),
+    won: scale(t.won),
+    value: scale(t.value),
+    late: scale(t.late),
+  }))
+  const totalLeads = team.reduce((a, t) => a + t.leads, 0)
+  const totalVisits = team.reduce((a, t) => a + t.visits, 0)
+  const totalWon = team.reduce((a, t) => a + t.won, 0)
+  const totalValue = team.reduce((a, t) => a + t.value, 0)
+  const totalLate = team.reduce((a, t) => a + t.late, 0)
+  const maxLeads = Math.max(...team.map((t) => t.leads)) || 1
 
   const unassigned = ['Ishita Vyas', 'Aarav Desai']
   const overdue = TASKS.filter((t) => t.due === 'overdue')
@@ -28,6 +43,7 @@ export default function ManagerDashboard({
     <>
       <PageHead title="Team dashboard" sub="Mansi Shah · Bridal and Gifting · November, sample data">
         <RoleSwitch role={role} setRole={setRole} />
+        <PeriodChips value={period} onChange={setPeriod} />
       </PageHead>
 
       <section
@@ -50,11 +66,11 @@ export default function ManagerDashboard({
         aria-label="Team numbers"
         className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]"
       >
-        <Stat label="Leads this month" value={totalLeads} note="across 4 salespeople" />
+        <Stat label={`Leads ${PERIOD_LABEL[period]}`} value={totalLeads} note="across 4 salespeople" />
         <Stat
           label="Visits scheduled"
           value={totalVisits}
-          note={`of ${TEAM.reduce((a, t) => a + t.target, 0)} target`}
+          note={`of ${team.reduce((a, t) => a + t.target, 0)} target`}
           noteTone="soft"
         />
         <Stat label="Purchased" value={totalWon} note={inr(totalValue) + ' sales value'} noteTone="good" />
@@ -62,7 +78,7 @@ export default function ManagerDashboard({
       </section>
 
       <Card className="flex flex-col gap-0">
-        <CardHead title="How each salesperson is doing" aside="November, so far" />
+        <CardHead title="How each salesperson is doing" aside={PERIOD_LABEL[period]} />
         <div className="-mx-5 mt-2 overflow-x-auto">
           <table className="w-full min-w-[840px] border-collapse text-[13px]">
             <thead>
@@ -77,7 +93,7 @@ export default function ManagerDashboard({
               </tr>
             </thead>
             <tbody>
-              {TEAM.map((t) => {
+              {team.map((t) => {
                 const [initials, bg] = REPS[t.rep]
                 const slow = t.replyMins > 20
                 return (
