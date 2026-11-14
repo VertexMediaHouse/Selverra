@@ -240,8 +240,14 @@ function AddLead({ go }: { go: (r: Route) => void }) {
   )
 }
 
-export function LeadsList({ go }: { go: (r: Route) => void }) {
-  const bar = useFilters()
+export function LeadsList({
+  go,
+  moved,
+}: {
+  go: (r: Route) => void
+  moved: Record<string, Stage>
+}) {
+  const bar = useFilters(moved)
   const { rows } = bar
   const [picked, setPicked] = useState<Record<string, true>>({})
 
@@ -420,8 +426,15 @@ export function LeadsList({ go }: { go: (r: Route) => void }) {
   )
 }
 
-export function LeadsKanban({ go }: { go: (r: Route) => void }) {
-  const [moved, setMoved] = useState<Record<string, Stage>>({})
+export function LeadsKanban({
+  go,
+  moved,
+  setMoved,
+}: {
+  go: (r: Route) => void
+  moved: Record<string, Stage>
+  setMoved: (f: (p: Record<string, Stage>) => Record<string, Stage>) => void
+}) {
   const [over, setOver] = useState<Stage | null>(null)
   const bar = useFilters(moved)
   const { rows } = bar
@@ -437,7 +450,7 @@ export function LeadsKanban({ go }: { go: (r: Route) => void }) {
     <>
       <PageHead
         title="Leads"
-        sub="Drag a card to another column to change its stage. Moving out of Messaged asks for the message that was sent; moving to Purchased asks what they bought."
+        sub="Drag a card to change its stage. Some moves ask for a quick detail."
       >
         <ViewSwitch view="kanban" go={go} />
         <HeadActions go={go} />
@@ -449,8 +462,10 @@ export function LeadsKanban({ go }: { go: (r: Route) => void }) {
         <div className="flex min-w-max items-start gap-3">
           {STAGES.map((stage) => {
             const cards = rows.filter((l) => l.stage === stage)
-            const total = STAGE_TOTALS[stage]
-            const more = total - cards.length
+            // The leads beyond the sample rows, which no drag can touch. Counted from the
+            // mock's own sample so a move shifts the header total instead of the remainder.
+            const more = STAGE_TOTALS[stage] - LEADS.filter((l) => l.stage === stage).length
+            const total = cards.length + more
             return (
               <section
                 key={stage}

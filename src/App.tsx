@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Shell, type Route } from './components/Shell'
-import type { Role } from './data/types'
+import type { Role, Stage } from './data/types'
 import Calendar from './pages/Calendar'
 import CampaignDetail from './pages/CampaignDetail'
 import Campaigns from './pages/Campaigns'
@@ -34,6 +34,8 @@ const routeFromHash = (): Route => {
 export default function App() {
   const [route, setRoute] = useState<Route>(routeFromHash)
   const [role, setRole] = useState<Role>('owner')
+  // Stage moves made by dragging on the kanban, kept here so they survive a view switch.
+  const [moved, setMoved] = useState<Record<string, Stage>>({})
 
   useEffect(() => {
     const onHash = () => setRoute(routeFromHash())
@@ -59,11 +61,11 @@ export default function App() {
   const page = () => {
     switch (current) {
       case 'leads':
-        return <LeadsList go={go} />
+        return <LeadsList go={go} moved={moved} />
       case 'kanban':
-        return <LeadsKanban go={go} />
+        return <LeadsKanban go={go} moved={moved} setMoved={setMoved} />
       case 'lead':
-        return <LeadDetail go={go} />
+        return <LeadDetail go={go} moved={moved} setMoved={setMoved} />
       case 'campaigns':
         return <Campaigns go={go} />
       case 'campaign':

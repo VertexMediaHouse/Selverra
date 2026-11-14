@@ -37,3 +37,13 @@ body {
   a:not([class*="text-"]) { color: var(--color-plum); }
   a:not([class*="text-"]):hover { color: var(--color-plum-deep); }
 }
+
+/* Scrolls, but the bar itself is hidden. */
+.no-bar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-bar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}

@@ -7,16 +7,37 @@ import { REPS, TASK_CHIP, type Task } from '../data/types'
 
 type Tab = 'overdue' | 'today' | 'upcoming' | 'done'
 
-/** The automations the CRM runs on its own. Toggles are local-only for now. */
-const AUTO_RULES: { title: string; sub: string }[] = [
-  { title: 'New lead is assigned', sub: 'First message or call task, due in 15 minutes' },
-  { title: 'Lead unassigned for 30 minutes', sub: 'Task for the manager to assign it' },
-  { title: 'Lead moves to Messaged', sub: 'Call task for the next working day' },
-  { title: 'A call is not answered', sub: 'Next call task after 1 day, up to Call 4, then No reply' },
-  { title: 'Site visit is booked', sub: 'Visit task at that time, plus a confirm call task 2 hours before' },
-  { title: 'Lead moves to Future contact', sub: 'Task on the chosen date, also shown in the Calendar' },
-  { title: 'Lead moves to Purchased', sub: 'Thank you call task after 3 days' },
+/** The automations the CRM runs on its own, grouped by when they fire.
+ *  Toggles are local-only for now. */
+const AUTO_GROUPS: { group: string; rules: { title: string; sub: string }[] }[] = [
+  {
+    group: 'When a lead arrives',
+    rules: [
+      { title: 'New lead is assigned', sub: 'First message or call task, due in 15 minutes' },
+      { title: 'Lead unassigned for 30 minutes', sub: 'Task for the manager to assign it' },
+    ],
+  },
+  {
+    group: 'While chasing',
+    rules: [
+      { title: 'Lead moves to Messaged', sub: 'Call task for the next working day' },
+      { title: 'A call is not answered', sub: 'Next call task after 1 day, up to Call 4, then No reply' },
+    ],
+  },
+  {
+    group: 'Around a visit or a date',
+    rules: [
+      { title: 'Site visit is booked', sub: 'Visit task at that time, plus a confirm call task 2 hours before' },
+      { title: 'Lead moves to Future contact', sub: 'Task on the chosen date, also shown in the Calendar' },
+    ],
+  },
+  {
+    group: 'After the sale',
+    rules: [{ title: 'Lead moves to Purchased', sub: 'Thank you call task after 3 days' }],
+  },
 ]
+
+const AUTO_RULES = AUTO_GROUPS.flatMap((g) => g.rules)
 
 export default function Tasks({ go }: { go: (r: Route) => void }) {
   const [whose, setWhose] = useState('Neha Shah')
@@ -46,6 +67,7 @@ export default function Tasks({ go }: { go: (r: Route) => void }) {
     done: mine.filter((t) => inTab(t, 'done')).length,
   }
   const rows = mine.filter((t) => inTab(t, tab))
+  const on = Object.values(auto).filter(Boolean).length
 
   const field = 'min-h-10 w-full rounded-[10px] border border-[#DCD5D1] bg-surface px-2.5 text-[13px] text-ink'
   const labelCls = 'flex flex-col gap-1 text-xs font-medium text-ink-mute'
@@ -259,24 +281,63 @@ export default function Tasks({ go }: { go: (r: Route) => void }) {
             </button>
           </Card>
 
-          <Card className="flex flex-col gap-3">
-            <h2 className="m-0 text-base font-semibold">Automatic tasks</h2>
-            <div className="flex flex-col gap-3">
-              {AUTO_RULES.map((r) => (
-                <label key={r.title} className="flex cursor-pointer items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={!!auto[r.title]}
-                    onChange={() => setAuto((a) => ({ ...a, [r.title]: !a[r.title] }))}
-                    className="mt-0.5 h-[16px] w-[16px] shrink-0 cursor-pointer accent-plum"
-                  />
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-[13px] font-semibold text-ink">{r.title}</span>
-                    <span className="text-xs text-ink-soft">{r.sub}</span>
-                  </span>
-                </label>
-              ))}
+          <Card className="flex flex-col gap-3 p-0">
+            <div className="flex items-start justify-between gap-3 px-5 pt-5">
+              <div>
+                <h2 className="m-0 text-base font-semibold">Automatic tasks</h2>
+                <p className="mt-1 mb-0 text-xs text-ink-mute">
+                  Follow-ups the CRM creates without anyone asking.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-chip px-2 py-1 text-[11px] font-semibold tabular-nums text-ink-mute">
+                {on} / {AUTO_RULES.length}
+              </span>
             </div>
+
+            {AUTO_GROUPS.map((g) => (
+              <section key={g.group} className="flex flex-col">
+                <h3 className="m-0 border-y border-line-soft bg-[#FBF9F8] px-5 py-1.5 text-[11px] font-semibold tracking-[0.06em] text-ink-mute uppercase">
+                  {g.group}
+                </h3>
+                {g.rules.map((r, i) => {
+                  const isOn = !!auto[r.title]
+                  return (
+                    <label
+                      key={r.title}
+                      className={`flex cursor-pointer items-center gap-3 px-5 py-3 transition-colors hover:bg-[#FBF9F8] ${
+                        i ? 'border-t border-line-soft' : ''
+                      }`}
+                    >
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span className={`text-[13px] font-semibold ${isOn ? 'text-ink' : 'text-ink-mute'}`}>
+                          {r.title}
+                        </span>
+                        <span className="text-xs text-ink-soft">{r.sub}</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={isOn}
+                        onChange={() => setAuto((a) => ({ ...a, [r.title]: !a[r.title] }))}
+                        className="peer sr-only"
+                      />
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-plum/30 ${
+                          isOn ? 'bg-plum' : 'bg-[#D8D2CE]'
+                        }`}
+                      >
+                        <span
+                          className={`h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${
+                            isOn ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </span>
+                    </label>
+                  )
+                })}
+              </section>
+            ))}
+            <div className="h-2" />
           </Card>
         </div>
       </div>

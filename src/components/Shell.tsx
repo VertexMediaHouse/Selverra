@@ -106,15 +106,15 @@ function NavLink({
         e.preventDefault()
         go(item.route)
       }}
-      className={`box-border flex min-h-11 items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-sm no-underline ${
-        on ? 'bg-white/12 font-semibold text-white' : 'font-medium text-rail-text hover:text-white'
+      className={`box-border flex min-h-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13px] leading-5 no-underline transition-colors ${
+        on ? 'bg-white/10 font-semibold text-white' : 'font-medium text-rail-text hover:bg-white/5 hover:text-white'
       }`}
     >
       {item.icon}
       {item.label}
       {item.badge ? (
         <span
-          className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-bold ${
+          className={`ml-auto rounded-full px-1.5 py-px text-[10px] font-semibold ${
             item.badge.tone === 'alert' ? 'bg-[#F4C7C3] text-[#5C1610]' : 'bg-blush text-rail'
           }`}
         >
@@ -139,12 +139,12 @@ export function Shell({
   const { main, foot } = navFor(role)
   const who = WHO[role]
   return (
-    <div className="flex min-h-screen flex-wrap gap-4 bg-ground p-4">
+    <div className="flex min-h-screen bg-ground">
       <nav
         aria-label="Main menu"
-        className="box-border flex h-[96vh] max-h-[96vh] flex-[1_1_220px] flex-col gap-1 self-start overflow-y-auto rounded-2xl bg-rail px-3 py-5 lg:sticky lg:top-4"
+        className="box-border flex h-screen w-[220px] shrink-0 flex-col gap-0.5 overflow-y-auto bg-rail p-2 sticky top-0"
       >
-        <div className="flex items-center gap-2.5 px-3 pt-1 pb-5">
+        <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-3">
           <div
             aria-hidden="true"
             className="flex h-8 w-8 items-center justify-center rounded-[9px] bg-blush text-[15px] font-bold text-rail"
@@ -162,20 +162,20 @@ export function Shell({
         ))}
 
         {foot.length ? (
-          <div className="mt-auto flex flex-col gap-1 border-t border-white/12 pt-3">
+          <div className="mt-auto flex flex-col gap-0.5 border-t border-white/10 pt-2">
             {foot.map((i) => (
               <NavLink key={i.route} item={i} current={route} go={go} />
             ))}
           </div>
         ) : null}
 
-        <div className={`flex flex-col gap-0.5 px-3 pt-3 pb-1 ${foot.length ? '' : 'mt-auto border-t border-white/12'}`}>
+        <div className={`flex flex-col gap-0.5 px-2.5 pt-2 pb-0.5 ${foot.length ? '' : 'mt-auto border-t border-white/10'}`}>
           <span className="text-[13px] font-semibold text-white">{who.name}</span>
           <span className="text-xs text-rail-mute">{who.scope}</span>
         </div>
       </nav>
 
-      <main className="box-border flex min-w-0 flex-[999_1_560px] flex-col gap-5 px-2 pt-2 pb-6">
+      <main className="box-border flex min-w-0 flex-1 flex-col gap-5 p-5">
         {children}
       </main>
     </div>

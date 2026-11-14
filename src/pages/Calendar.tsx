@@ -291,7 +291,7 @@ export default function Calendar({ go }: { go: (r: Route) => void }) {
         </div>
       </Card>
 
-      <div className="grid items-start gap-4 [grid-template-columns:minmax(0,1fr)] xl:[grid-template-columns:minmax(0,1fr)_360px]">
+      <div className="grid gap-4 [grid-template-columns:minmax(0,1fr)] xl:[grid-template-columns:minmax(0,1fr)_360px]">
         <Card className="overflow-x-auto">
           <div className="min-w-[640px]">
             {view === 'day' ? null : (
@@ -388,8 +388,8 @@ export default function Calendar({ go }: { go: (r: Route) => void }) {
           </div>
         </Card>
 
-        <Card className="flex flex-col">
-          <header className="pb-2">
+        <Card className="flex max-h-[calc(100vh-2.5rem)] min-h-0 flex-col xl:sticky xl:top-5">
+          <header className="shrink-0 pb-2">
             <h2 className="m-0 text-[15px] font-bold">
               {DAY_FULL_FMT.format(selDate)}
               {isToday ? ' · today' : ''}
@@ -402,6 +402,7 @@ export default function Calendar({ go }: { go: (r: Route) => void }) {
             </p>
           </header>
 
+          <div className="no-bar min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {agenda.length === 0 ? (
             <p className="m-0 border-t border-line-soft py-4 text-xs text-ink-mute">
               Nothing booked on this day
@@ -432,11 +433,12 @@ export default function Calendar({ go }: { go: (r: Route) => void }) {
               </article>
             ))
           )}
+          </div>
 
           <button
             type="button"
             onClick={() => go('tasks')}
-            className="mt-1 cursor-pointer border-0 border-t border-line-soft bg-transparent py-3 text-center text-xs font-semibold text-plum"
+            className="mt-1 shrink-0 cursor-pointer border-0 border-t border-line-soft bg-transparent py-3 text-center text-xs font-semibold text-plum"
           >
             + Add task or visit on this day
           </button>
